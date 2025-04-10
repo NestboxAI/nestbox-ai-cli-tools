@@ -1,0 +1,35 @@
+{
+  "name": "@nestbox-ai/cli",
+  "version": "1.0.0",
+  "description": "The cli tools that helps developers to build agents",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "vitest",
+    "coverage": "vitest run --coverage",
+    "clean": "rimraf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NestboxAI/nestbox-ai-cli-tools.git"
+  },
+  "keywords": [
+    "cli"
+  ],
+  "author": "Nestbox AI",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/NestboxAI/nestbox-ai-cli-tools/issues"
+  },
+  "homepage": "https://github.com/NestboxAI/nestbox-ai-cli-tools#readme",
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@nestbox-ai/admin": "^1.0.38"
+  }
+}

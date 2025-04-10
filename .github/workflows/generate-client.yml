@@ -1,0 +1,41 @@
+name: Generate the Nextbo AI Cli Tools
+on:
+  push:
+    branches:
+        - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  generate-client:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Node.js for npm Publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Update package version
+        run: |
+          new_version="1.0.${{ github.run_number }}"
+          jq ".version = \"$new_version\"" package.json > temp.json && mv temp.json package.json
+          echo "Updated version to $new_version"  
+
+      - name: Build and Publish Clients to npm
+        run: |
+          npm install && npm run build
+          npm publish --access public --registry=https://registry.npmjs.org
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
