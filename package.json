@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "description": "The cli tools that helps developers to build agents",
   "main": "dist/index.js",
+  "bin": {
+    "nestbox": "./dist/index.js"
+  },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
@@ -18,7 +21,11 @@
     "url": "git+https://github.com/NestboxAI/nestbox-ai-cli-tools.git"
   },
   "keywords": [
-    "cli"
+    "cli",
+    "nestbox",
+    "ai",
+    "agent",
+    "deployment"
   ],
   "author": "Nestbox AI",
   "license": "ISC",
@@ -27,9 +34,27 @@
   },
   "homepage": "https://github.com/NestboxAI/nestbox-ai-cli-tools#readme",
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.10.5",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.8.3",
+    "vitest": "^1.1.0"
   },
   "dependencies": {
-    "@nestbox-ai/admin": "^1.0.38"
+    "@nestbox-ai/admin": "^1.0.38",
+    "axios": "^1.8.4",
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^11.1.0",
+    "inquirer": "^9.2.12",
+    "open": "^10.0.0",
+    "ora": "^7.0.1"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
