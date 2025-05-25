@@ -1,0 +1,9 @@
+{
+    "agents" : {
+        "predeploy" : [
+            "rm -rf dist",
+            "npm run lint",
+            "npm run build"
+        ]
+    }
+}

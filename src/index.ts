@@ -3,6 +3,9 @@ import { Command } from 'commander';
 import { registerAuthCommands } from './commands/auth';
 import { registerProjectCommands } from './commands/projects';
 import { registerComputeProgram } from './commands/compute';
+import { registerAgentCommands } from './commands/agent';
+import { registerDocumentCommands } from './commands/document';
+import { registerImageCommands } from './commands/image';
 
 // Setup the CLI program
 const program = new Command();
@@ -15,6 +18,9 @@ program
 registerAuthCommands(program);
 registerProjectCommands(program);
 registerComputeProgram(program);
+registerAgentCommands(program);
+registerDocumentCommands(program);
+registerImageCommands(program);
 
 // Parse command line arguments
 program.parse(process.argv);
