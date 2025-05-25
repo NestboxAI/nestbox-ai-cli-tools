@@ -1,8 +1,9 @@
 name: Generate the Nextbo AI Cli Tools
+
 on:
   push:
     branches:
-        - '*'
+      - main
 
 permissions:
   contents: write
