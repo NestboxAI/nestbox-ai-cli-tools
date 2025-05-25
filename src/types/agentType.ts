@@ -1,7 +1,7 @@
 /**
  * This file defines the AgentType type, which is used to categorize different types of agents.
  */
-export enum AgentType {
-  REGULAR = 'REGULAR',
-  CHATBOT = 'CHATBOT',
+export class AgentType {
+  public static REGULAR = 'REGULAR';
+  public static CHATBOT = 'CHATBOT';
 }

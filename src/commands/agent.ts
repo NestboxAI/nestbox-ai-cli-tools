@@ -184,7 +184,7 @@ export function registerAgentCommands(program: Command): void {
             await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
               projectData.id,
               0,
-              100, // Increased to make sure we get all agents
+              100,
               AgentType.REGULAR
             );
 
