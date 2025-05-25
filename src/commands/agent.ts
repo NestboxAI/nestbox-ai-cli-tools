@@ -265,7 +265,7 @@ export function registerAgentCommands(program: Command): void {
     .description("Deploy an AI agent to the Nestbox platform")
     .requiredOption("--agent <agentId>", "Agent ID to deploy")
     .requiredOption("--instance <instanceId>", "Instance ID")
-    .requiredOption(
+    .option(
       "--zip <zipFileOrDirPath>",
       "Path to the zip file or directory to upload"
     )
