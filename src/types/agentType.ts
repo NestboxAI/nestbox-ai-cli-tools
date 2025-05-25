@@ -3,5 +3,5 @@
  */
 export enum AgentType {
   REGULAR = 'REGULAR',
-  CHATBOT = 'CHATBOT',
+  CHAT = 'CHAT',
 }
