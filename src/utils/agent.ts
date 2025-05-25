@@ -143,7 +143,7 @@ export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_mo
       const itemRelativePath = path.join(relativePath, item);
       
       // Check if item should be excluded
-      if (excludePatterns.some(pattern => 
+      if (excludePatterns.some((pattern: any) => 
         typeof pattern === 'string' ? itemRelativePath === pattern || item === pattern : 
         pattern.test(itemRelativePath)
       )) {

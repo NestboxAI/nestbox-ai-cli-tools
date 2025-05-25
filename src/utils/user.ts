@@ -19,7 +19,7 @@ export async function userData() {
         );
         
         return response.data;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error fetching user data:", error.message || "Unknown error");
         if (error.response) {
         }

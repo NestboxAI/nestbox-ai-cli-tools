@@ -51,7 +51,7 @@ agentCommand
 
       try {
         // Now get the agents for the specific project
-        const agentsResponse = await agentsApi.machineAgentControllerGetMachineAgentByProjectId(projectData.id, 0, 10);
+        const agentsResponse: any = await agentsApi.machineAgentControllerGetMachineAgentByProjectId(projectData.id, 0, 10, "");
         
         spinner.succeed('Successfully retrieved agents');
 
@@ -81,7 +81,7 @@ agentCommand
         });
         
         // Add agents to the table with the requested info
-        agents.forEach((agent) => {
+        agents.forEach((agent: any) => {
           // Format the agent URL
           let url = 'N/A';
           if (agent.instanceIP) {
@@ -149,17 +149,18 @@ agentCommand
     
     try {
       // First, get the list of agents to find the correct modelbaseId
-      const agentsResponse = await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
+      const agentsResponse: any = await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
         projectData.id, 
         0, 
-        100 // Increased to make sure we get all agents
+        100, // Increased to make sure we get all agents
+        ""
       );
       
       // Get the agents array
       const agents = agentsResponse.data?.machineAgents || [];
       
       // Find the specific agent by ID
-      const targetAgent = agents.find(a => a.id.toString() === agent.toString());
+      const targetAgent = agents.find((a: any) => a.id.toString() === agent.toString());
       
       if (!targetAgent) {
         spinner.fail(`Agent with ID ${agent} not found in project ${projectData.name}`);

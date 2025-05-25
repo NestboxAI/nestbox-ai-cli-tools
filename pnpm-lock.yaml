@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@nestbox-ai/admin':
-        specifier: 1.0.39
-        version: 1.0.39
+        specifier: 1.0.42
+        version: 1.0.42
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16
@@ -419,8 +419,8 @@ packages:
   '@jridgewell/sourcemap-codec@1.5.0':
     resolution: {integrity: sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==}
 
-  '@nestbox-ai/admin@1.0.39':
-    resolution: {integrity: sha512-k5svBv/gvLgOfx8AclJbup0WCXKmV1/RCl8BJ3FC5M9BZcmP/cmLSWSVhYelHMQG4AUdIamBGzS4EmsJPQOj3g==}
+  '@nestbox-ai/admin@1.0.42':
+    resolution: {integrity: sha512-1EWQLAa7j+PXiHsgXg6ivteI6PU1xHG0SzGDXSvRMW5+LwkSPxFqX6cavWK8f3chYt8zAuwdoJbC+7JKQ5gcBQ==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -1894,7 +1894,7 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.0': {}
 
-  '@nestbox-ai/admin@1.0.39':
+  '@nestbox-ai/admin@1.0.42':
     dependencies:
       axios: 1.8.4
     transitivePeerDependencies:
