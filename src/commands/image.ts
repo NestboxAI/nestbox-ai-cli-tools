@@ -23,7 +23,9 @@ async function executeCommand<T>(
   } catch (error: any) {
     spinner.fail('Operation failed');
 
-    if (error.response?.data?.message) {
+    if (error.response && error.response.status === 401) {
+      console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+    } else if (error.response?.data?.message) {
       console.error(chalk.red('API Error:'), error.response.data.message);
     } else {
       console.error(chalk.red('Error:'), error.message || 'Unknown error');
@@ -68,7 +70,7 @@ export function registerImageCommands(program: Command): void {
       const images: any = await executeCommand(
         `Listing images for project ${project.name}...`,
         async () => {
-          const response = await miscellaneousApi.miscellaneousControllerGetMachineInstanceByImageId(project.id);
+          const response = await miscellaneousApi.miscellaneousControllerGetData();
           return response.data;
         },
         'Successfully retrieved images'
@@ -82,13 +84,12 @@ export function registerImageCommands(program: Command): void {
       // Create a table for displaying the image data
       const table = new Table({
         head: [
-          chalk.white.bold('ID'), 
           chalk.white.bold('Name'), 
-          chalk.white.bold('Machine Type'),
-          chalk.white.bold('Status'), 
-          chalk.white.bold('Region'),
-          chalk.white.bold('API Key'),
-          chalk.white.bold('Internal IP')
+          chalk.white.bold('Type'),
+          chalk.white.bold('License'), 
+          chalk.white.bold('Type'),
+          chalk.white.bold('Pricing'),
+          chalk.white.bold('Source')
         ],
         style: {
           head: [], // Disable the default styling
@@ -135,13 +136,12 @@ export function registerImageCommands(program: Command): void {
         }
         
         table.push([
-          image.id || 'N/A',
-          image.instanceName || 'N/A',
-          image.machineTitle || 'N/A',
-          statusColor,
-          image.region || 'N/A',
-          image.instanceApiKey || 'N/A',
-          image.internalIP || 'N/A'
+          image.name || 'N/A',
+          image.type || 'N/A',
+          image.metadata.License || 'N/A',
+          image.metadata.Type || 'N/A',
+          image.metadata.Pricing || 'N/A',
+          image.source || 'N/A'
         ]);
       });
       

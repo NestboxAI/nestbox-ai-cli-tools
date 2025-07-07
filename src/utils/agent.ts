@@ -6,6 +6,7 @@ import { promisify } from "util";
 import { exec } from "child_process";
 import AdmZip from "adm-zip";
 import * as os from 'os';
+import axios from "axios";
 
 
 const execAsync = promisify(exec);
@@ -167,4 +168,85 @@ export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_mo
   
   // Return the temp path for upload
   return tempZipFilePath;
+}
+
+export interface TemplateInfo {
+  name: string;
+  description: string;
+  fileId: string;
+  lang: string;
+  type: string;
+}
+
+export const TEMPLATES: Record<string, TemplateInfo> = {
+  'template-base-js.zip': {
+    name: 'Base JavaScript Agent',
+    description: 'Basic JavaScript agent template',
+    fileId: '1EYaa4eZWDc3HiaSnauXgW7oLJYzqOhPZ', // Replace with actual file ID
+    lang: 'js',
+    type: 'agent'
+  },
+  'template-base-ts.zip': {
+    name: 'Base TypeScript Agent',
+    description: 'Basic TypeScript agent template',
+    fileId: '1kk2JWlgeRuNOGpz8wsZUTD115qfNzWk5', // Replace with actual file ID
+    lang: 'ts',
+    type: 'agent'
+  },
+  'template-chatbot-js.zip': {
+    name: 'JavaScript Chatbot',
+    description: 'JavaScript chatbot template',
+    fileId: '1b4c4NQa_Qm85-GwObn52D-bEKz48zh9O', // Replace with actual file ID
+    lang: 'js',
+    type: 'chatbot'
+  },
+  'template-chatbot-ts.zip': {
+    name: 'TypeScript Chatbot',
+    description: 'TypeScript chatbot template',
+    fileId: '1vbA5Jlet3XIRMQ4NSsMsLMeHt-mUhRTe', // Replace with actual file ID
+    lang: 'ts',
+    type: 'chatbot'
+  }
+};
+
+export async function downloadFromGoogleDrive(fileId: string, outputPath: string): Promise<void> {
+  const url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  
+  const response = await axios({
+    method: 'GET',
+    url: url,
+    responseType: 'stream',
+  });
+
+  const writer = fs.createWriteStream(outputPath);
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+
+// Helper function to extract zip file
+export function extractZip(zipPath: string, extractPath: string): void {
+  const zip = new AdmZip(zipPath);
+  zip.extractAllTo(extractPath, true);
+}
+
+export function createNestboxConfig(projectPath: string, isTypeScript: boolean): void {
+  if (!isTypeScript) return;
+
+  const configPath = path.join(projectPath, 'nestbox.config.json');
+  const config = {
+    agents: {
+      predeploy: [
+        'rm -rf dist',
+        'npm run lint',
+        'npm run build'
+      ]
+    }
+  };
+
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(chalk.green(`Created nestbox.config.json at ${configPath}`));
 }

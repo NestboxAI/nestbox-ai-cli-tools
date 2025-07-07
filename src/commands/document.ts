@@ -24,7 +24,9 @@ async function executeCommand<T>(
   } catch (error: any) {
     spinner.fail('Operation failed');
 
-    if (error.response?.data?.message) {
+    if (error.response && error.response.status === 401) {
+      console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+    } else if (error.response?.data?.message) {
       console.error(chalk.red('API Error:'), error.response.data.message);
     } else {
       console.error(chalk.red('Error:'), error.message || 'Unknown error');

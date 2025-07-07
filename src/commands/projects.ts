@@ -85,7 +85,11 @@ export function registerProjectCommands(program: Command): void {
                     console.log(chalk.green(`Default project set to '${projectName}'`));
                 })
                 .catch((error) => {
-                    console.error(error.message);
+                    if (error.response && error.response.status === 401) {
+                        console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                    } else {
+                        console.error(error.message);
+                    }
                 });
 
             } catch (error) {
@@ -136,4 +140,73 @@ export function registerProjectCommands(program: Command): void {
                 console.error(chalk.red('Error adding project:'), error instanceof Error ? error.message : 'Unknown error');
             }
         });
+
+
+    projectCommand
+    .command('list')
+    .description('List all projects')
+    .action(async () => {
+        try {
+            if (!authToken) {
+                console.error(chalk.red('No authentication token found. Please log in first.'));
+                return;
+            }
+
+            // Fetch projects from API
+            const response = await projectsApi.projectControllerGetAllProjects();
+            const apiProjects = response.data.data.projects;
+
+            if (!apiProjects || apiProjects.length === 0) {
+                console.log(chalk.yellow('No projects found.'));
+                return;
+            }
+
+            // Read local config to get default project and aliases
+            const config = readNestboxConfig();
+            const localProjects = config.projects || {};
+            const defaultProject = localProjects.default;
+
+            console.log(chalk.blue('Available Projects:'));
+            console.log(''); // Empty line for better formatting
+
+            // Display each project from the API
+            apiProjects.forEach((project: any) => {
+                const projectName = project.name;
+                const isDefault = defaultProject === projectName;
+                
+                // Find aliases for this project
+                const aliases = Object.entries(localProjects)
+                    .filter(([key, value]) => value === projectName && key !== 'default' && key !== projectName)
+                    .map(([alias]) => alias);
+
+                // Build the display line
+                let displayLine = `  ${projectName}`;
+                
+                if (aliases.length > 0) {
+                    displayLine += chalk.gray(` (aliases: ${aliases.join(', ')})`);
+                }
+                
+                if (isDefault) {
+                    displayLine += chalk.green(' [DEFAULT]');
+                }
+
+                console.log(displayLine);
+            });
+
+            // Show summary
+            console.log(''); // Empty line
+            if (defaultProject) {
+                console.log(chalk.gray(`Default project: ${defaultProject}`));
+            } else {
+                console.log(chalk.gray('No default project set. Use "nestbox project use <project-name>" to set one.'));
+            }
+
+        } catch (error: any) {
+            if (error.response && error.response.status === 401) {
+                console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+            } else {
+                console.error(chalk.red('Error listing projects:'), error instanceof Error ? error.message : 'Unknown error');
+            }
+        }
+    });
 }

@@ -129,14 +129,20 @@ export function registerComputeProgram(program: Command): void {
                     
                 } catch (error: any) {
                     spinner.fail('Failed to retrieve compute instances');
-                    if (error.response) {
+                    if (error.response && error.response.status === 401) {
+                        console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                    } else if (error.response) {
                         console.error(chalk.red('API Error:'), error.response.data?.message || 'Unknown error');
                     } else {
                         console.error(chalk.red('Error:'), error.message || 'Unknown error');
                     }
                 }
             } catch (error: any) {
-                console.error(chalk.red('Error:'), error.message || 'Unknown error');
+                if (error.response && error.response.status === 401) {
+                    console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                } else {
+                    console.error(chalk.red('Error:'), error.message || 'Unknown error');
+                }
             }
         });
 
@@ -293,7 +299,9 @@ export function registerComputeProgram(program: Command): void {
                 console.log(chalk.green("Instance created successfully!"));
               } catch (createError: any) {
                 creationSpinner.fail('Failed to create compute instance');
-                if (createError.response) {
+                if (createError.response && createError.response.status === 401) {
+                  console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                } else if (createError.response) {
                   console.error(chalk.red('API Error:'), createError.response.data?.message || 'Unknown error');
                 } else {
                   console.error(chalk.red('Error:'), createError.message || 'Unknown error');
@@ -302,14 +310,20 @@ export function registerComputeProgram(program: Command): void {
               
             } catch (error: any) {
               spinner.fail('Failed to fetch available images');
-              if (error.response) {
+              if (error.response && error.response.status === 401) {
+                console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+              } else if (error.response) {
                 console.error(chalk.red('API Error:'), error.response.data?.message || 'Unknown error');
               } else {
                 console.error(chalk.red('Error:'), error.message || 'Unknown error');
               }
             }
           } catch (error: any) {
-            console.error(chalk.red('Error:'), error.message || 'Unknown error');
+            if (error.response && error.response.status === 401) {
+              console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+            } else {
+              console.error(chalk.red('Error:'), error.message || 'Unknown error');
+            }
           }
         });
 
@@ -417,7 +431,9 @@ export function registerComputeProgram(program: Command): void {
                 
               } catch (error: any) {
                 deleteSpinner.fail(`Failed to delete instances`);
-                if (error.response) {
+                if (error.response && error.response.status === 401) {
+                  console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                } else if (error.response) {
                   console.error(chalk.red('API Error:'), error.response.data?.message || 'Unknown error');
                 } else {
                   console.error(chalk.red('Error:'), error.message || 'Unknown error');
@@ -426,14 +442,20 @@ export function registerComputeProgram(program: Command): void {
               
             } catch (error: any) {
               spinner.fail('Failed to retrieve compute instances');
-              if (error.response) {
+              if (error.response && error.response.status === 401) {
+                console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+              } else if (error.response) {
                 console.error(chalk.red('API Error:'), error.response.data?.message || 'Unknown error');
               } else {
                 console.error(chalk.red('Error:'), error.message || 'Unknown error');
               }
             }
           } catch (error: any) {
-            console.error(chalk.red('Error:'), error.message || 'Unknown error');
+            if (error.response && error.response.status === 401) {
+              console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+            } else {
+              console.error(chalk.red('Error:'), error.message || 'Unknown error');
+            }
           }
         });
 }
