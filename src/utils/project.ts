@@ -2,11 +2,10 @@ import { ProjectsApi } from "@nestbox-ai/admin";
 import ora from "ora";
 import { readNestboxConfig } from "../commands/projects";
 
-
 interface ProjectInfo {
     id: string;
     name: string;
-  }
+}
 
 interface CommandOptions {
     instance: string;
@@ -17,15 +16,24 @@ interface CommandOptions {
     [key: string]: any;
 }
 
-export async function resolveProject(projectsApi: ProjectsApi, options: CommandOptions): Promise<ProjectInfo> {
-  const spinner = ora('Resolving project...').start();
+interface ResolveProjectOptions extends CommandOptions {
+    showSpinner?: boolean;  // New option to control spinner visibility
+}
+
+export async function resolveProject(
+    projectsApi: ProjectsApi, 
+    options: ResolveProjectOptions
+): Promise<ProjectInfo> {
+  // Default to showing spinner if not specified
+  const showSpinner = options.showSpinner !== false;
+  const spinner = showSpinner ? ora('Resolving project...').start() : null;
   
   try {
     const projectsResponse = await projectsApi.projectControllerGetAllProjects();
     const allProjects = projectsResponse.data?.data?.projects;
 
     if (!allProjects || allProjects.length === 0) {
-      spinner.fail('No projects found.');
+      if (spinner) spinner.fail('No projects found.');
       throw new Error('No projects found');
     }
 
@@ -43,39 +51,38 @@ export async function resolveProject(projectsApi: ProjectsApi, options: CommandO
         projectName = byName.name;
         projectId = byName.id;
       } else {
-        spinner.fail(`Project not found with ID or name: ${projectId}`);
+        if (spinner) spinner.fail(`Project not found with ID or name: ${projectId}`);
         throw new Error(`Project not found with ID or name: ${projectId}`);
       }
 
-      spinner.succeed(`Using project: ${projectName} (ID: ${projectId})`);
+      if (spinner) spinner.succeed(`Using project: ${projectName} (ID: ${projectId})`);
     } else {
       const config = readNestboxConfig();
       const defaultProjectName = config.projects?.default;
 
       if (!defaultProjectName) {
-        spinner.fail('No project specified and no default project set. Please provide a project ID or set a default project.');
+        if (spinner) spinner.fail('No project specified and no default project set. Please provide a project ID or set a default project.');
         throw new Error('No project specified and no default project set');
       }
 
       const defaultProject = allProjects.find((p) => p.name === defaultProjectName);
 
       if (!defaultProject) {
-        spinner.fail(`Default project "${defaultProjectName}" not found.`);
+        if (spinner) spinner.fail(`Default project "${defaultProjectName}" not found.`);
         throw new Error(`Default project "${defaultProjectName}" not found.`);
       }
 
       projectId = defaultProject.id;
       projectName = defaultProject.name;
-      spinner.succeed(`Using default project: ${projectName} (ID: ${projectId})`);
+      if (spinner) spinner.succeed(`Using default project: ${projectName} (ID: ${projectId})`);
     }
 
     return { id: projectId, name: projectName };
   } catch (error) {
-    if (!spinner.isSpinning) {
+    if (spinner && spinner.isSpinning) {
       // If spinner was already stopped with fail, we don't need to fail it again
-      throw error;
+      spinner.fail('Failed to resolve project');
     }
-    spinner.fail('Failed to resolve project');
     throw error;
   }
 }

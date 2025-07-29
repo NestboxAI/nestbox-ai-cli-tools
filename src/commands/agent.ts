@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { handle401Error, withTokenRefresh } from "../utils/error";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
@@ -48,7 +49,6 @@ async function createAgent(
     machineInstanceId?: number;
     instanceIP?: string;
     userId?: number;
-
     parameters?: Array<{name: string; description: string; default: any}>;
   }, 
   agentsApi?: MachineAgentApi,
@@ -120,6 +120,7 @@ async function createAgent(
     return response.data;
   } catch (error: any) {
     spinner.fail(`Failed to create ${resourceType.toLowerCase()} ${agentName}`);
+    
     if (error.response && error.response.status === 401) {
       throw new Error('Authentication token has expired. Please login again using "nestbox login <domain>".');
     } else if (error.response) {
@@ -131,20 +132,28 @@ async function createAgent(
 }
 
 export function registerAgentCommands(program: Command): void {
-  // Get authentication token and create API configuration
-  const authToken = getAuthToken();
-  const configuration = new Configuration({
-    basePath: authToken?.serverUrl,
-    baseOptions: {
-      headers: {
-        Authorization: authToken?.token,
+  // Function to create/recreate API instances
+  const createApis = () => {
+    const authToken = getAuthToken();
+    if (!authToken) {
+      throw new Error('No authentication token found. Please log in first.');
+    }
+    
+    const configuration = new Configuration({
+      basePath: authToken.serverUrl,
+      baseOptions: {
+        headers: {
+          Authorization: authToken.token,
+        },
       },
-    },
-  });
+    });
 
-  const agentsApi = new MachineAgentApi(configuration);
-  const projectsApi = new ProjectsApi(configuration);
-  const instanceApi = new MachineInstancesApi(configuration)
+    return {
+      agentsApi: new MachineAgentApi(configuration),
+      projectsApi: new ProjectsApi(configuration),
+      instanceApi: new MachineInstancesApi(configuration)
+    };
+  };
 
   // Create the main agent command
   const agentCommand = program
@@ -161,112 +170,88 @@ export function registerAgentCommands(program: Command): void {
     )
     .action(async (options) => {
       try {
-        if (!authToken) {
-          console.error(
-            chalk.red("No authentication token found. Please login first.")
-          );
-          return;
-        }
+        let apis = createApis();
 
-        try {
-          // Use the resolveProject helper to get project information
-          const projectData = await resolveProject(projectsApi, options);
+        // Execute with token refresh support
+        await withTokenRefresh(
+          async () => {
+            // Resolve project
+            const projectData = await resolveProject(apis.projectsApi, options);
 
-          const spinner = ora(
-            `Listing agents in project ${projectData.name}...`
-          ).start();
+            const spinner = ora(
+              `Listing agents in project ${projectData.name}...`
+            ).start();
 
-          try {
-            // Now get the agents for the specific project
-            const agentsResponse: any =
-              await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
-                projectData.id,
-                0,
-                10,
-                AgentType.REGULAR
-              );
+            try {
+              // Get the agents for the specific project
+              const agentsResponse: any =
+                await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
+                  projectData.id,
+                  0,
+                  10,
+                  AgentType.REGULAR
+                );
 
-            spinner.succeed("Successfully retrieved agents");
+              spinner.succeed("Successfully retrieved agents");
 
-            // Display the results
-            const agents = agentsResponse.data?.machineAgents || [];
+              // Display the results
+              const agents = agentsResponse.data?.machineAgents || [];
 
-            if (!agents || agents.length === 0) {
+              if (!agents || agents.length === 0) {
+                console.log(
+                  chalk.yellow(`No agents found in project ${projectData.name}`)
+                );
+                return;
+              }
+
               console.log(
-                chalk.yellow(`No agents found in project ${projectData.name}`)
+                chalk.blue(`\nAgents in project ${projectData.name}:\n`)
               );
-              return;
+
+              // Create a formatted table
+              const table = new Table({
+                head: [
+                  chalk.white.bold("ID"),
+                  chalk.white.bold("Name"),
+                  chalk.white.bold("URL"),
+                ],
+                style: {
+                  head: [],
+                  border: [],
+                },
+              });
+
+              // Add agents to the table
+              agents.forEach((agent: any) => {
+                let url = "N/A";
+                if (agent.instanceIP) {
+                  url = `${agent.instanceIP}/v1/agents/${agent.modelBaseId}/query`;
+                }
+
+                table.push([agent.id || "N/A", agent.agentName || "N/A", url]);
+              });
+
+              console.log(table.toString());
+              console.log(`\nTotal agents: ${agents.length}`);
+              
+            } catch (error: any) {
+              spinner.fail("Failed to retrieve agents");
+              throw error;
             }
-
-            console.log(
-              chalk.blue(`\nAgents in project ${projectData.name}:\n`)
-            );
-
-            // Create a formatted table focusing on id, name, and URL
-            const table = new Table({
-              head: [
-                chalk.white.bold("ID"),
-                chalk.white.bold("Name"),
-                chalk.white.bold("URL"),
-              ],
-              style: {
-                head: [], // Disable the default styling
-                border: [],
-              },
-            });
-
-            // Add agents to the table with the requested info
-            agents.forEach((agent: any) => {
-              // Format the agent URL
-              let url = "N/A";
-              if (agent.instanceIP) {
-                // Construct an agent-specific URL if possible
-                url = `${agent.instanceIP}/v1/agents/${agent.modelBaseId}/query`;
-              }
-
-              // Format date for readability
-              let createdAt = agent.createdAt || "N/A";
-              if (createdAt !== "N/A") {
-                createdAt = new Date(createdAt).toLocaleString();
-              }
-
-              table.push([agent.id || "N/A", agent.agentName || "N/A", url]);
-            });
-
-            // Display the table
-            console.log(table.toString());
-
-            // Display totals
-            console.log(`\nTotal agents: ${agents.length}`);
-          } catch (error: any) {
-            spinner.fail("Failed to retrieve agents");
-            if (error.response && error.response.status === 401) {
-              console.error(
-                chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".')
-              );
-            } else if (error.response) {
-              console.error(
-                chalk.red("API Error:"),
-                error.response.data?.message || "Unknown error"
-              );
-            } else {
-              console.error(
-                chalk.red("Error:"),
-                error.message || "Unknown error"
-              );
-            }
+          },
+          () => {
+            // Recreate APIs after token refresh
+            apis = createApis();
           }
-        } catch (error: any) {
-          console.error(
-            chalk.red("Error:"),
-            error instanceof Error ? error.message : "Unknown error"
-          );
-        }
-      } catch (error) {
-        console.error(
-          chalk.red("Error:"),
-          error instanceof Error ? error.message : "Unknown error"
         );
+      } catch (error: any) {
+        if (error.message && error.message.includes('Authentication')) {
+          console.error(chalk.red(error.message));
+        } else if (error.response?.data?.message) {
+          console.error(chalk.red("API Error:"), error.response.data.message);
+        } else {
+          console.error(chalk.red("Error:"), error.message || "Unknown error");
+        }
       }
     });
 
@@ -281,409 +266,323 @@ export function registerAgentCommands(program: Command): void {
     )
     .action(async (options) => {
       try {
-        if (!authToken) {
+        let apis = createApis();
+        const { agent } = options;
+
+        await withTokenRefresh(
+          async () => {
+            // Resolve project
+            const projectData = await resolveProject(apis.projectsApi, options);
+
+            const spinner = ora(
+              `Finding agent ${agent} in project ${projectData.name}...`
+            ).start();
+
+            try {
+              // Get the list of agents to find the correct modelbaseId
+              const agentsResponse: any =
+                await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
+                  projectData.id,
+                  0,
+                  100,
+                  AgentType.REGULAR
+                );
+
+              const agents = agentsResponse.data?.machineAgents || [];
+              const targetAgent = agents.find(
+                (a: any) => a.id.toString() === agent.toString()
+              );
+
+              if (!targetAgent) {
+                spinner.fail(
+                  `Agent with ID ${agent} not found in project ${projectData.name}`
+                );
+                return;
+              }
+
+              const modelbaseId = targetAgent.modelBaseId;
+              if (!modelbaseId) {
+                spinner.fail(
+                  `Could not find modelbaseId for agent ${agent}. Please try again.`
+                );
+                return;
+              }
+
+              spinner.text = `Removing agent ${agent} from project ${projectData.name}...`;
+
+              // Remove the agent
+              const payload: any = [
+                {
+                  id: parseInt(agent, 10),
+                  modelbaseId: modelbaseId,
+                },
+              ];
+
+              await apis.agentsApi.machineAgentControllerDeleteMachineAgents(
+                projectData.id,
+                agent,
+                payload
+              );
+
+              spinner.succeed("Successfully removed agent");
+              console.log(
+                chalk.green(
+                  `Agent ${agent} removed successfully from project ${projectData.name}`
+                )
+              );
+            } catch (error: any) {
+              spinner.fail("Failed to remove agent");
+              throw error;
+            }
+          },
+          () => {
+            apis = createApis();
+          }
+        );
+      } catch (error: any) {
+        if (error.message && error.message.includes('Authentication')) {
+          console.error(chalk.red(error.message));
+        } else if (error.response?.data?.message) {
+          console.error(chalk.red("API Error:"), error.response.data.message);
+        } else {
+          console.error(chalk.red("Error:"), error.message || "Unknown error");
+        }
+      }
+    });
+
+  agentCommand
+    .command("deploy")
+    .description("Deploy an AI agent to the Nestbox platform")
+    .option("--agent <agentName>", "Agent name to deploy")
+    .option("--chatbot <chatbotName>", "Chatbot name to deploy")
+    .requiredOption("--instance <instanceName>", "Instance name")
+    .option(
+      "--zip <zipFileOrDirPath>",
+      "Path to the zip file or directory to upload"
+    )
+    .option(
+      "--project <projectName>",
+      "Project name (defaults to the current project)"
+    )
+    .option("--entry <entryFunction>", "Entry function name", "main")
+    .action(async (options) => {
+      try {
+        const {
+          agent: agentName,
+          chatbot: chatbotName,
+          instance: instanceName,
+          zip: customZipPath,
+          entry,
+        } = options;
+        
+        // Ensure either agent or chatbot is provided, but not both
+        if ((!agentName && !chatbotName) || (agentName && chatbotName)) {
           console.error(
-            chalk.red("No authentication token found. Please login first.")
+            chalk.red("Please provide either --agent OR --chatbot option, but not both.")
           );
           return;
         }
 
-        const { agent } = options;
+        let apis = createApis();
 
-        // Use the resolveProject helper to get project information
-        const projectData = await resolveProject(projectsApi, options);
+        // Find project root
+        const projectRoot = await findProjectRoot();
+        console.log(chalk.blue(`Project root detected at: ${projectRoot}`));
 
-        const spinner = ora(
-          `Finding agent ${agent} in project ${projectData.name}...`
-        ).start();
+        // Main deployment logic with token refresh
+        await withTokenRefresh(
+          async () => {
+            // Resolve project
+            const projectData = await resolveProject(apis.projectsApi, options);
 
-        try {
-          // First, get the list of agents to find the correct modelbaseId
-          const agentsResponse: any =
-            await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
-              projectData.id,
-              0,
-              100,
-              AgentType.REGULAR
+            // Determine if we're deploying an agent or chatbot
+            const isAgent = !!agentName;
+            const resourceName = isAgent ? agentName : chatbotName;
+            const resourceType = isAgent ? "Agent" : "Chatbot";
+            const agentType = isAgent ? AgentType.REGULAR : "CHAT";
+            
+            // Get agents data and find agent/chatbot by name
+            const agentsData: any = await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
+              projectData.id, 
+              0, 
+              10, 
+              agentType
             );
 
-          // Get the agents array
-          const agents = agentsResponse.data?.machineAgents || [];
-
-          // Find the specific agent by ID
-          const targetAgent = agents.find(
-            (a: any) => a.id.toString() === agent.toString()
-          );
-
-          if (!targetAgent) {
-            spinner.fail(
-              `Agent with ID ${agent} not found in project ${projectData.name}`
-            );
-            return;
-          }
-
-          // Extract the modelbaseId from the found agent
-          const modelbaseId = targetAgent.modelBaseId;
-
-          if (!modelbaseId) {
-            spinner.fail(
-              `Could not find modelbaseId for agent ${agent}. Please try again.`
-            );
-            return;
-          }
-
-          spinner.text = `Removing agent ${agent} from project ${projectData.name}...`;
-
-          // Now remove the agent with the dynamically retrieved modelbaseId
-          const payload: any = [
-            {
-              id: parseInt(agent, 10),
-              modelbaseId: modelbaseId,
-            },
-          ];
-
-          const removeResponse =
-            await agentsApi.machineAgentControllerDeleteMachineAgents(
-              projectData.id,
-              agent,
-              payload
+            const targetAgent = agentsData.data.machineAgents.find(
+              (agent: any) => agent.agentName === resourceName
             );
 
-          spinner.succeed("Successfully removed agent");
-
-          // Display the results
-          console.log(
-            chalk.green(
-              `Agent ${agent} removed successfully from project ${projectData.name}`
-            )
-          );
-        } catch (error: any) {
-          spinner.fail("Failed to remove agent");
-          if (error.response && error.response.status === 401) {
-            console.error(
-              chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".')
-            );
-          } else if (error.response) {
-            console.error(
-              chalk.red("API Error:"),
-              error.response.data?.message || "Unknown error"
-            );
-          } else {
-            console.error(
-              chalk.red("Error:"),
-              error.message || "Unknown error"
-            );
-          }
-        }
-      } catch (error) {
-        console.error(
-          chalk.red("Error:"),
-          error instanceof Error ? error.message : "Unknown error"
-        );
-      }
-    });
-
-   agentCommand
-  .command("deploy")
-  .description("Deploy an AI agent to the Nestbox platform")
-  .option("--agent <agentName>", "Agent name to deploy")
-  .option("--chatbot <chatbotName>", "Chatbot name to deploy")
-  .requiredOption("--instance <instanceName>", "Instance name")
-  .option(
-    "--zip <zipFileOrDirPath>",
-    "Path to the zip file or directory to upload"
-  )
-  .option(
-    "--project <projectName>",
-    "Project name (defaults to the current project)"
-  )
-  .option("--entry <entryFunction>", "Entry function name", "main")
-  .action(async (options) => {
-    try {
-      if (!authToken) {
-        console.error(
-          chalk.red("No authentication token found. Please login first.")
-        );
-        return;
-      }
-
-      const {
-        agent: agentName,
-        chatbot: chatbotName,
-        instance: instanceName,
-        zip: customZipPath,
-        entry,
-      } = options;
-      
-      // Ensure either agent or chatbot is provided, but not both
-      if ((!agentName && !chatbotName) || (agentName && chatbotName)) {
-        console.error(
-          chalk.red("Please provide either --agent OR --chatbot option, but not both.")
-        );
-        return;
-      }
-
-      // Find project root (CLI tools directory)
-      const projectRoot = await findProjectRoot();
-      console.log(chalk.blue(`Project root detected at: ${projectRoot}`));
-
-      // Use the resolveProject helper to get project information
-      const projectData = await resolveProject(projectsApi, options);
-
-      // Determine if we're deploying an agent or chatbot
-      const isAgent = !!agentName;
-      const resourceName = isAgent ? agentName : chatbotName;
-      const resourceType = isAgent ? "Agent" : "Chatbot";
-      const agentType = isAgent ? AgentType.REGULAR : "CHAT";
-      
-      // Get agents data and find agent/chatbot by name
-      const agentsData: any = await agentsApi.machineAgentControllerGetMachineAgentByProjectId(
-        projectData.id, 
-        0, 
-        10, 
-        agentType
-      );
-
-      const targetAgent = agentsData.data.machineAgents.find(
-        (agent: any) => agent.agentName === resourceName
-      );
-
-      if (!targetAgent) {
-        console.error(
-          chalk.red(`${resourceType} with name "${resourceName}" not found in project "${projectData.name}".`)
-        );
-        console.log(chalk.yellow(`Available ${resourceType.toLowerCase()}s:`));
-        agentsData.data.machineAgents.forEach((agent: any) => {
-          console.log(chalk.yellow(`  - ${agent.agentName} (ID: ${agent.id})`));
-        });
-        return;
-      }
-
-      // Get instance data and find instance by name
-      const instanceData: any = await instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
-        projectData.id, 
-        0, 
-        10
-      );
-
-      const targetInstance = instanceData.data.machineInstances.find(
-        (instance: any) => instance.instanceName === instanceName
-      );
-
-      if (!targetInstance) {
-        console.error(
-          chalk.red(`Instance with name "${instanceName}" not found in project "${projectData.name}".`)
-        );
-        console.log(chalk.yellow("Available instances:"));
-        instanceData.data.machineInstances.forEach((instance: any) => {
-          console.log(chalk.yellow(`  - ${instance.instanceName} (ID: ${instance.id})`));
-        });
-        return;
-      }
-
-      // Extract IDs for use in the rest of the original logic
-      const agentId = targetAgent.id;
-      const instanceId = targetInstance.id;
-
-      // Load nestbox.config.json from CLI tools directory
-      const config = loadNestboxConfig(projectRoot);
-
-      // Start the deployment process
-      const spinner = ora(
-        `Preparing to deploy ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`
-      ).start();
-
-      try {
-        let zipFilePath;
-
-        if (customZipPath) {
-          // User provided a custom zip path - use it directly
-          if (!fs.existsSync(customZipPath)) {
-            spinner.fail(`Path not found: ${customZipPath}`);
-            return;
-          }
-
-          const stats = fs.statSync(customZipPath);
-
-          if (stats.isFile()) {
-            // It's a file - verify it's a zip and use directly
-            if (!customZipPath.toLowerCase().endsWith(".zip")) {
-              spinner.fail(`File is not a zip archive: ${customZipPath}`);
+            if (!targetAgent) {
+              console.error(
+                chalk.red(`${resourceType} with name "${resourceName}" not found in project "${projectData.name}".`)
+              );
+              console.log(chalk.yellow(`Available ${resourceType.toLowerCase()}s:`));
+              agentsData.data.machineAgents.forEach((agent: any) => {
+                console.log(chalk.yellow(`  - ${agent.agentName} (ID: ${agent.id})`));
+              });
               return;
             }
 
-            // Use the zip file directly (no predeploy scripts)
-            spinner.text = `Using provided zip file: ${customZipPath}`;
-            zipFilePath = customZipPath;
-          } else if (stats.isDirectory()) {
-            // It's a directory - process it
-            spinner.text = `Processing directory: ${customZipPath}`;
-            
-            // Determine if it's a TypeScript project
-            const isTypeScript = isTypeScriptProject(customZipPath);
+            // Get instance data and find instance by name
+            const instanceData: any = await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
+              projectData.id, 
+              0, 
+              10
+            );
 
-            if (isTypeScript) {
-              spinner.text = `TypeScript project detected. Checking for predeploy scripts...`;
+            const targetInstance = instanceData.data.machineInstances.find(
+              (instance: any) => instance.instanceName === instanceName
+            );
 
-              // Run predeploy scripts if defined in CLI tools config
-              if (config?.agent?.predeploy || config?.agents?.predeploy) {
-                const predeployScripts =
-                  config?.agent?.predeploy || config?.agents?.predeploy;
-                spinner.text = `Running predeploy scripts on target directory...`;
-                await runPredeployScripts(predeployScripts, customZipPath);
-              } else {
-                spinner.info(
-                  "No predeploy scripts found in CLI tools nestbox.config.json"
-                );
-              }
-            } else {
-              // JavaScript directory - just zip it
-              spinner.text = `JavaScript project detected. Skipping predeploy scripts.`;
-            }
-
-            // Create zip archive with node_modules excluded
-            spinner.text = `Creating zip archive from directory ${customZipPath}...`;
-            zipFilePath = createZipFromDirectory(customZipPath);
-            spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-          } else {
-            spinner.fail(`Unsupported file type: ${customZipPath}`);
-            return;
-          }
-        } else {
-          // No custom path - use project root
-          spinner.text = `Using project root: ${projectRoot}`;
-          
-          // Determine if it's a TypeScript project
-          const isTypeScript = isTypeScriptProject(projectRoot);
-
-          if (isTypeScript) {
-            spinner.text = `TypeScript project detected. Checking for predeploy scripts...`;
-
-            // Run predeploy scripts if defined in CLI tools config
-            if (config?.agent?.predeploy || config?.agents?.predeploy) {
-              const predeployScripts =
-                config?.agent?.predeploy || config?.agents?.predeploy;
-              spinner.text = `Running predeploy scripts on project root...`;
-              await runPredeployScripts(predeployScripts, projectRoot);
-            } else {
-              spinner.info(
-                "No predeploy scripts found in CLI tools nestbox.config.json"
+            if (!targetInstance) {
+              console.error(
+                chalk.red(`Instance with name "${instanceName}" not found in project "${projectData.name}".`)
               );
+              console.log(chalk.yellow("Available instances:"));
+              instanceData.data.machineInstances.forEach((instance: any) => {
+                console.log(chalk.yellow(`  - ${instance.instanceName} (ID: ${instance.id})`));
+              });
+              return;
             }
-          } else {
-            // JavaScript directory - just zip it
-            spinner.text = `JavaScript project detected. Skipping predeploy scripts.`;
-          }
 
-          // Create zip archive with node_modules excluded
-          spinner.text = `Creating zip archive from project root ${projectRoot}...`;
-          zipFilePath = createZipFromDirectory(projectRoot);
-          spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-        }
+            // Extract IDs
+            const agentId = targetAgent.id;
+            const instanceId = targetInstance.id;
 
-        spinner.text = `Deploying ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`;
+            // Load nestbox.config.json
+            const config = loadNestboxConfig(projectRoot);
 
-        // Clean the base URL to avoid path duplication
-        const baseUrl = authToken?.serverUrl?.endsWith("/")
-          ? authToken.serverUrl.slice(0, -1)
-          : authToken?.serverUrl;
+            // Start the deployment process
+            const spinner = ora(
+              `Preparing to deploy ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`
+            ).start();
 
-        // Import FormData dynamically for ESM compatibility
-        const { default: FormData } = await import("form-data");
-        const form = new FormData();
+            try {
+              let zipFilePath;
 
-        // Add file as a readable stream
-        form.append("file", fs.createReadStream(zipFilePath));
+              if (customZipPath) {
+                // Process custom zip path
+                if (!fs.existsSync(customZipPath)) {
+                  spinner.fail(`Path not found: ${customZipPath}`);
+                  return;
+                }
 
-        // Add all the required fields
-        form.append("machineAgentId", agentId.toString());
-        form.append("instanceId", instanceId.toString());
-        form.append("entryFunctionName", entry);
-        form.append("isSourceCodeUpdate", "true");
-        form.append("projectId", projectData.id);
+                const stats = fs.statSync(customZipPath);
 
-        // Create a custom axios instance with form-data headers
-        const axiosInstance = axios.create({
-          baseURL: baseUrl,
-          headers: {
-            ...form.getHeaders(),
-            Authorization: authToken?.token,
+                if (stats.isFile()) {
+                  if (!customZipPath.toLowerCase().endsWith(".zip")) {
+                    spinner.fail(`File is not a zip archive: ${customZipPath}`);
+                    return;
+                  }
+                  spinner.text = `Using provided zip file: ${customZipPath}`;
+                  zipFilePath = customZipPath;
+                } else if (stats.isDirectory()) {
+                  // Process directory
+                  spinner.text = `Processing directory: ${customZipPath}`;
+                  
+                  const isTypeScript = isTypeScriptProject(customZipPath);
+
+                  if (isTypeScript && (config?.agent?.predeploy || config?.agents?.predeploy)) {
+                    const predeployScripts = config?.agent?.predeploy || config?.agents?.predeploy;
+                    spinner.text = `Running predeploy scripts on target directory...`;
+                    await runPredeployScripts(predeployScripts, customZipPath);
+                  }
+
+                  spinner.text = `Creating zip archive from directory ${customZipPath}...`;
+                  zipFilePath = createZipFromDirectory(customZipPath);
+                  spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+                }
+              } else {
+                // Use project root
+                spinner.text = `Using project root: ${projectRoot}`;
+                
+                const isTypeScript = isTypeScriptProject(projectRoot);
+
+                if (isTypeScript && (config?.agent?.predeploy || config?.agents?.predeploy)) {
+                  const predeployScripts = config?.agent?.predeploy || config?.agents?.predeploy;
+                  spinner.text = `Running predeploy scripts on project root...`;
+                  await runPredeployScripts(predeployScripts, projectRoot);
+                }
+
+                spinner.text = `Creating zip archive from project root ${projectRoot}...`;
+                zipFilePath = createZipFromDirectory(projectRoot);
+                spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+              }
+
+              spinner.text = `Deploying ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`;
+
+              // Prepare deployment
+              const authToken = getAuthToken();
+              const baseUrl = authToken?.serverUrl?.endsWith("/")
+                ? authToken.serverUrl.slice(0, -1)
+                : authToken?.serverUrl;
+
+              const { default: FormData } = await import("form-data");
+              const form = new FormData();
+
+              form.append("file", fs.createReadStream(zipFilePath));
+              form.append("machineAgentId", agentId.toString());
+              form.append("instanceId", instanceId.toString());
+              form.append("entryFunctionName", entry);
+              form.append("isSourceCodeUpdate", "true");
+              form.append("projectId", projectData.id);
+
+              const axiosInstance = axios.create({
+                baseURL: baseUrl,
+                headers: {
+                  ...form.getHeaders(),
+                  Authorization: authToken?.token,
+                },
+              });
+
+              const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
+
+              console.log(chalk.blue("\nMaking API request:"));
+              console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
+              console.log(chalk.blue(`  Method: PATCH`));
+              console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));
+
+              spinner.text = `Sending API request to deploy ${resourceType.toLowerCase()}...`;
+              const res = await axiosInstance.patch(endpoint, form);
+              
+              console.log(chalk.green("\nAPI Response received:"));
+              console.log(chalk.green(`  Status: ${res.status} ${res.statusText}`));
+
+              if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {
+                fs.unlinkSync(zipFilePath);
+              }
+
+              spinner.succeed(
+                `Successfully deployed ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}`
+              );
+              console.log(chalk.green(`${resourceType} deployed successfully`));
+            } catch (error: any) {
+              spinner.fail(`Failed to deploy ${resourceType.toLowerCase()}`);
+              throw error;
+            }
           },
-        });
-
-        // Construct the endpoint URL
-        const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
-
-        // Log API request details
-        console.log(chalk.blue("Making API request:"));
-        console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
-        console.log(chalk.blue(`  Method: PATCH`));
-        console.log(chalk.blue(`  machineAgentId: ${agentId}`));
-        console.log(chalk.blue(`  instanceId: ${instanceId}`));
-        console.log(chalk.blue(`  entryFunctionName: ${entry}`));
-        console.log(chalk.blue(`  projectId: ${projectData.id}`));
-        console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));
-
-        // Make direct axios request
-        spinner.text = `Sending API request to deploy ${resourceType.toLowerCase()}...`;
-        const res = await axiosInstance.patch(endpoint, form);
-        
-        // Log API response
-        console.log(chalk.green("API Response received:"));
-        console.log(chalk.green(`  Status: ${res.status} ${res.statusText}`));
-        console.log(chalk.green(`  Data: ${JSON.stringify(res.data, null, 2)}`));
-
-        if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {
-          fs.unlinkSync(zipFilePath);
-        }
-
-        spinner.succeed(
-          `Successfully deployed ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}`
-        );
-        console.log(chalk.green(`${resourceType} deployed successfully`));
-      } catch (error: any) {
-        spinner.fail(`Failed to deploy ${resourceType.toLowerCase()}`);
-
-        // Log detailed API error information
-        console.error(chalk.red("API Call Failed:"));
-        
-        if (error.response && error.response.status === 401) {
-          console.error(
-            chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".')
-          );
-          console.error(chalk.red("Response details:"));
-          console.error(chalk.red(`  Status: ${error.response.status}`));
-          console.error(chalk.red(`  Status Text: ${error.response.statusText}`));
-          if (error.response.data) {
-            console.error(chalk.red(`  Error Data: ${JSON.stringify(error.response.data, null, 2)}`));
+          () => {
+            apis = createApis();
           }
+        );
+      } catch (error: any) {
+        if (error.message && error.message.includes('Authentication')) {
+          console.error(chalk.red(error.message));
         } else if (error.response) {
           console.error(
             chalk.red(
               `API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
             )
           );
-          console.error(chalk.red("Response details:"));
-          console.error(chalk.red(`  Status: ${error.response.status}`));
-          console.error(chalk.red(`  Status Text: ${error.response.statusText}`));
           if (error.response.data) {
-            console.error(chalk.red(`  Error Data: ${JSON.stringify(error.response.data, null, 2)}`));
+            console.error(chalk.red(`Error Data: ${JSON.stringify(error.response.data, null, 2)}`));
           }
         } else {
-          console.error(
-            chalk.red("Error:"),
-            error.message || "Unknown error"
-          );
-          console.error(chalk.red("No response details available"));
+          console.error(chalk.red("Error:"), error.message || "Unknown error");
         }
       }
-    } catch (error) {
-      console.error(
-        chalk.red("Error:"),
-        error instanceof Error ? error.message : "Unknown error"
-      );
-    }
-  });
+    });
 
   agentCommand
     .command("generate <folder>")
@@ -737,44 +636,51 @@ export function registerAgentCommands(program: Command): void {
           spinner.start("Generating project...");
         }
 
-        // Find matching template
-        // Map the template types to the correct keys in the TEMPLATES object
+
+        // Find matching template in local templates folder
         const templateMapping: Record<string, string> = {
           'agent': 'base',
           'chatbot': 'chatbot'
         };
-        
         const mappedTemplateType = templateMapping[selectedTemplate] || selectedTemplate;
         const templateKey = `template-${mappedTemplateType}-${selectedLang}.zip`;
-        const template = TEMPLATES[templateKey];
-
-        if (!template) {
-          spinner.fail(`Template not found for ${selectedTemplate} in ${selectedLang}`);
-          console.log(chalk.yellow('Available templates:'));
-          Object.entries(TEMPLATES).forEach(([key, value]: [string, any]) => {
-            console.log(chalk.yellow(`  - ${value.type} (${value.lang}): ${value.name}`));
-          });
+        // Try process.cwd() first, then __dirname fallback
+        let templatePath = path.resolve(process.cwd(), 'templates', templateKey);
+        if (!fs.existsSync(templatePath)) {
+          // fallback to __dirname
+          templatePath = path.resolve(__dirname, '../../templates', templateKey);
+        }
+        if (!fs.existsSync(templatePath)) {
+          spinner.fail(`Template not found: ${templatePath}`);
+          // Show available templates in both locations
+          const cwdTemplates = path.resolve(process.cwd(), 'templates');
+          const dirTemplates = path.resolve(__dirname, '../../templates');
+          let shown = false;
+          if (fs.existsSync(cwdTemplates)) {
+            console.log(chalk.yellow('Available templates in ./templates:'));
+            fs.readdirSync(cwdTemplates).forEach(file => {
+              console.log(chalk.yellow(`  - ${file}`));
+            });
+            shown = true;
+          }
+          if (fs.existsSync(dirTemplates)) {
+            console.log(chalk.yellow('Available templates in src/commands/../../templates:'));
+            fs.readdirSync(dirTemplates).forEach(file => {
+              console.log(chalk.yellow(`  - ${file}`));
+            });
+            shown = true;
+          }
+          if (!shown) {
+            console.log(chalk.red('No templates directory found. Please add your templates.'));
+          }
           return;
         }
 
-        spinner.text = `Downloading ${template.name} template...`;
-
-        // Create temporary directory for download
-        const tempDir = path.join(process.cwd(), '.temp-templates');
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const tempZipPath = path.join(tempDir, templateKey);
+        spinner.text = `Extracting template to ${folder}...`;
 
         try {
-          // Download template from Google Drive
-          await downloadFromGoogleDrive(template.fileId, tempZipPath);
-          
-          spinner.text = `Extracting template to ${folder}...`;
-
           // Extract template to target folder
-          extractZip(tempZipPath, folder);
+          extractZip(templatePath, folder);
 
           // Create nestbox.config.json for TypeScript projects
           createNestboxConfig(folder, selectedLang === 'ts');
@@ -787,13 +693,7 @@ export function registerAgentCommands(program: Command): void {
             fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
           }
 
-          // Clean up temp files
-          fs.unlinkSync(tempZipPath);
-          if (fs.readdirSync(tempDir).length === 0) {
-            fs.rmdirSync(tempDir);
-          }
-
-          spinner.succeed(`Successfully generated ${template.name} project in ${folder}`);
+          spinner.succeed(`Successfully generated ${mappedTemplateType} project in ${folder}`);
           
           console.log(chalk.green("\nNext steps:"));
           console.log(chalk.yellow(`  cd ${folder}`));
@@ -805,9 +705,6 @@ export function registerAgentCommands(program: Command): void {
 
         } catch (error) {
           // Clean up on error
-          if (fs.existsSync(tempZipPath)) {
-            fs.unlinkSync(tempZipPath);
-          }
           if (fs.existsSync(folder)) {
             fs.rmSync(folder, { recursive: true, force: true });
           }
@@ -829,21 +726,15 @@ export function registerAgentCommands(program: Command): void {
     .option("--project <projectId>", "Project ID (defaults to the current project)")
     .action(async (firstArg: string, secondArg: any, options: any) => {
       try {
-        if (!authToken) {
-          console.error(chalk.red("No authentication token found. Please login first."));
-          return;
-        }
+        let apis = createApis();
 
         // Determine which argument is the YAML file path
         let yamlFilePath: string;
         
         if (firstArg === 'file' && secondArg) {
-          // Format: nestbox agent create file <yamlFile>
           yamlFilePath = secondArg;
         } else if (firstArg) {
-          // Format: nestbox agent create <yamlFile>
           yamlFilePath = firstArg;
-          // In this case, secondArg might be options if using Commander's default parsing
           if (typeof secondArg === 'object' && !options) {
             options = secondArg;
           }
@@ -873,12 +764,15 @@ export function registerAgentCommands(program: Command): void {
           
           spinner.succeed(`Found ${config.agents.length} agents in configuration file`);
           
-          // Process each agent
+          // Process each agent with token refresh support
           const results = {
             success: 0,
             failed: 0,
             agents: [] as Array<{name: string; success: boolean; message: string}>
           };
+          
+          // Get user data once
+          const user = await userData();
           
           for (const agent of config.agents) {
             if (!agent.name) {
@@ -892,47 +786,43 @@ export function registerAgentCommands(program: Command): void {
               continue;
             }
             
-            // Determine the type of resource (Agent or Chat)
             let agentType = agent.type || "CHAT";
-            // If type is "AGENT", convert it to "REGULAR" for API payload
-            const payloadType = agentType === "AGENT" ? "REGULAR" : agentType;
-            // Properly determine resource type based on exact agent type value
             const resourceType = agentType === "AGENT" ? "Agent" : "Chatbot";
             
             const agentSpinner = ora(`Creating ${resourceType.toLowerCase()} '${agent.name}'...`).start();
-
-            const user = await userData();
             
             try {
-              // Map YAML config to createAgent options with default values
-              const createOptions = {
-                ...options,
-                goal: agent.goal || "No goal specified",
-                modelBaseId: agent.modelBaseId || "",
-                instanceIP: agent.instanceIP || "localhost",
-                machineInstanceId: agent.machineInstanceId || 1,
-                machineManifestId: agent.machineManifestId || "default",
-                machineName: agent.machineName || `agent-${agent.name.toLowerCase()}`,
-                // Set the original agent type, so createAgent can determine the resource type correctly
-                type: agentType,
-                userId: user.id,
-                parameters: agent.parameters ? agent.parameters.map((p: any) => {
-                  return {
-                    name: p.name || "unnamed",
-                    description: p.description || "",
-                    default: p.default || "",
-                    isUserParam: p.isUserParam !== undefined ? p.isUserParam : true
+              // Create agent with token refresh support
+              await withTokenRefresh(
+                async () => {
+                  // Map YAML config to createAgent options
+                  const createOptions = {
+                    ...options,
+                    goal: agent.goal || "No goal specified",
+                    modelBaseId: agent.modelBaseId || "",
+                    instanceIP: agent.instanceIP || "localhost",
+                    machineInstanceId: agent.machineInstanceId || 1,
+                    machineManifestId: agent.machineManifestId || "default",
+                    machineName: agent.machineName || `agent-${agent.name.toLowerCase()}`,
+                    type: agentType,
+                    userId: user.id,
+                    parameters: agent.parameters ? agent.parameters.map((p: any) => {
+                      return {
+                        name: p.name || "unnamed",
+                        description: p.description || "",
+                        default: p.default || "",
+                        isUserParam: p.isUserParam !== undefined ? p.isUserParam : true
+                      };
+                    }) : []
                   };
-                }) : []
-              };
+                  
+                  await createAgent(agent.name, createOptions, apis.agentsApi, apis.projectsApi);
+                },
+                () => {
+                  apis = createApis();
+                }
+              );
               
-              // Update spinner text to use the correct resource type
-              agentSpinner.text = `Creating ${resourceType.toLowerCase()} '${agent.name}'...`;
-              
-              // Create the agent
-              await createAgent(agent.name, createOptions, agentsApi, projectsApi);
-              
-              // Always stop the spinner regardless of what createAgent does
               agentSpinner.stop();
               
               results.success++;
@@ -963,13 +853,12 @@ export function registerAgentCommands(program: Command): void {
               chalk.white.bold("Message"),
             ],
             style: {
-              head: [], // Disable the default styling
+              head: [],
               border: [],
             },
           });
           
           results.agents.forEach((agent, index) => {
-            // Get the corresponding agent definition from the config to determine type
             const agentConfig = config.agents.find(a => a.name === agent.name) || config.agents[index];
             const agentType = agentConfig?.type || "CHAT";
             const resourceType = agentType === "AGENT" ? "Agent" : "Chatbot";
@@ -999,10 +888,14 @@ export function registerAgentCommands(program: Command): void {
           }
         }
       } catch (error: any) {
-        console.error(
-          chalk.red("Error:"),
-          error instanceof Error ? error.message : "Unknown error"
-        );
+        if (error.message && error.message.includes('Authentication')) {
+          console.error(chalk.red(error.message));
+        } else {
+          console.error(
+            chalk.red("Error:"),
+            error instanceof Error ? error.message : "Unknown error"
+          );
+        }
       }
     });
 }
