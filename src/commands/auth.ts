@@ -127,6 +127,7 @@ export function registerAuthCommands(program: Command): void {
                 domain,
                 email,
                 token: authResponse.token,
+                accessToken, // Save the original accessToken
                 apiServerUrl,
                 name,
                 picture,

@@ -62,10 +62,36 @@ export function getAuthToken(domain?: string): {token: string, serverUrl: string
     return {
       token: configData.token,
       serverUrl: configData.apiServerUrl,
+      accessToken: configData.accessToken,
     }
   } catch (error) {
     console.error('Error getting auth token:', error);
     return null;
+  }
+}
+
+/**
+ * Update the authentication token for a specific user
+ */
+export function updateAuthToken(email: string, domain: string, newToken: string): boolean {
+  try {
+    const fileName = `${email.replace('@', '_at_')}_${domain}.json`;
+    const filePath = path.join(CONFIG_DIR, fileName);
+    
+    if (!fs.existsSync(filePath)) {
+      console.error(`Credential file not found for ${email} at ${domain}`);
+      return false;
+    }
+    
+    const configData = JSON.parse(fs.readFileSync(filePath).toString());
+    configData.token = newToken;
+    configData.timestamp = new Date().toISOString();
+    
+    fs.writeFileSync(filePath, JSON.stringify(configData, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error updating auth token:', error);
+    return false;
   }
 }
 
@@ -79,7 +105,8 @@ export function getUserCredentials(domain: string, email?: string): UserCredenti
     
     if (email) {
       // Get specific email for domain
-      targetFiles = files.filter(file => file === `${email}_${domain}.json`);
+      const emailFile = email.replace('@', '_at_');
+      targetFiles = files.filter(file => file === `${emailFile}_${domain}.json`);
     } else {
       // Get all for domain, sort by last used
       targetFiles = files.filter(file => file.endsWith(`_${domain}.json`));
@@ -89,10 +116,12 @@ export function getUserCredentials(domain: string, email?: string): UserCredenti
           const data = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, file)).toString()) as UserCredentials;
           return {
             file,
+            timestamp: data.timestamp || '1970-01-01T00:00:00.000Z'
           };
         });
         
-        // Sort by last used, most recent first
+        // Sort by timestamp, most recent first
+        allConfigs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         targetFiles = [allConfigs[0].file];
       }
     }
@@ -155,7 +184,8 @@ export function removeCredentials(domain: string, email?: string): boolean {
     
     if (email) {
       // Remove specific email for domain
-      domainFiles = files.filter(file => file === `${email}_${domain}.json`);
+      const emailFile = email.replace('@', '_at_');
+      domainFiles = files.filter(file => file === `${emailFile}_${domain}.json`);
     } else {
       // Remove all for domain
       domainFiles = files.filter(file => file.endsWith(`_${domain}.json`));

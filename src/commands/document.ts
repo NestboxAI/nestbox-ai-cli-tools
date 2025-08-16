@@ -5,6 +5,7 @@ import { getAuthToken } from '../utils/auth';
 import { Configuration, DocumentsApi, ProjectsApi } from '@nestbox-ai/admin';
 import { readNestboxConfig } from './projects';
 import { resolveProject } from '../utils/project';
+import { handle401Error } from '../utils/error';
 
 
 /**
@@ -23,13 +24,12 @@ async function executeCommand<T>(
     return result;
   } catch (error: any) {
     spinner.fail('Operation failed');
-
+    handle401Error(error);
     if (error.response?.data?.message) {
       console.error(chalk.red('API Error:'), error.response.data.message);
     } else {
       console.error(chalk.red('Error:'), error.message || 'Unknown error');
     }
-    
     throw error;
   }
 }

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { withTokenRefresh } from '../utils/error';
 import fs from 'fs';
 import path from 'path';
 import { getAuthToken } from '../utils/auth';
@@ -39,18 +40,24 @@ export function writeNestboxConfig(config: NestboxConfig): void {
 }
 
 export function registerProjectCommands(program: Command): void {
-
-    const authToken = getAuthToken();
-    const configuration = new Configuration({
-        basePath: authToken?.serverUrl,
-        baseOptions:{
-            headers: {
-                "Authorization": authToken?.token,
-            }
+    // Function to create/recreate the ProjectsApi instance
+    const createProjectsApi = () => {
+        const authToken = getAuthToken();
+        if (!authToken) {
+            throw new Error('No authentication token found. Please log in first.');
         }
-    });
-
-    const projectsApi = new ProjectsApi(configuration);
+        
+        const configuration = new Configuration({
+            basePath: authToken.serverUrl,
+            baseOptions: {
+                headers: {
+                    "Authorization": authToken.token,
+                }
+            }
+        });
+        
+        return new ProjectsApi(configuration);
+    };
 
     // Create the main project command
     const projectCommand = program
@@ -61,35 +68,43 @@ export function registerProjectCommands(program: Command): void {
     projectCommand
         .command('use <project-name>')
         .description('Set default project for all commands')
-        .action((projectName: string) => {
+        .action(async (projectName: string) => {
             try {
-                if (!authToken) {
-                    console.error(chalk.red('No authentication token found. Please log in first.'));
-                    return;
-                }
                 const config = readNestboxConfig();
-
-                // Set the default project
                 config.projects = config.projects || {};
                 config.projects.default = projectName;
 
-                projectsApi.projectControllerGetAllProjects()
-                .then((response) => {
-                    // Check if the project exists
-                    const projectExists = response.data.data.projects.some((project: any) => project.name === projectName);
-                    if (!projectExists) {
-                        throw new Error(`Project '${projectName}' does not exist.`);
-                    }
-                    // Write the configuration
-                    writeNestboxConfig(config);
-                    console.log(chalk.green(`Default project set to '${projectName}'`));
-                })
-                .catch((error) => {
-                    console.error(error.message);
-                });
+                let projectsApi = createProjectsApi();
 
-            } catch (error) {
-                console.error(chalk.red('Error setting default project:'), error instanceof Error ? error.message : 'Unknown error');
+                // Use withTokenRefresh wrapper for automatic retry
+                const response = await withTokenRefresh(
+                    async () => {
+                        return await projectsApi.projectControllerGetAllProjects();
+                    },
+                    // Recreate the API client after token refresh
+                    () => {
+                        projectsApi = createProjectsApi();
+                    }
+                );
+                
+                // Check if the project exists
+                const projectExists = response.data.data.projects.some((project: any) => project.name === projectName);
+                if (!projectExists) {
+                    console.error(chalk.red(`Project '${projectName}' does not exist.`));
+                    return;
+                }
+                
+                // Write the configuration
+                writeNestboxConfig(config);
+                console.log(chalk.green(`Default project set to '${projectName}'`));
+            } catch (error: any) {
+                if (error.message && error.message.includes('Authentication')) {
+                    console.error(chalk.red(error.message));
+                } else if (error.message) {
+                    console.error(chalk.red('Error setting default project:'), error.message);
+                } else {
+                    console.error(chalk.red('Error setting default project:'), 'Unknown error');
+                }
             }
         });
 
@@ -99,6 +114,7 @@ export function registerProjectCommands(program: Command): void {
         .description('Add a project with optional alias')
         .action((projectName: string, alias?: string) => {
             try {
+                const authToken = getAuthToken();
                 if (!authToken) {
                     console.error(chalk.red('No authentication token found. Please log in first.'));
                     return;
@@ -136,4 +152,79 @@ export function registerProjectCommands(program: Command): void {
                 console.error(chalk.red('Error adding project:'), error instanceof Error ? error.message : 'Unknown error');
             }
         });
+
+    projectCommand
+    .command('list')
+    .description('List all projects')
+    .action(async () => {
+        try {
+            let projectsApi = createProjectsApi();
+                
+                // Use withTokenRefresh wrapper for automatic retry
+                const response = await withTokenRefresh(
+                    async () => {
+                        return await projectsApi.projectControllerGetAllProjects();
+                    },
+                    // Recreate the API client after token refresh
+                    () => {
+                        projectsApi = createProjectsApi();
+                    }
+                );
+
+            const apiProjects = response.data.data.projects;
+
+            if (!apiProjects || apiProjects.length === 0) {
+                console.log(chalk.yellow('No projects found.'));
+                return;
+            }
+
+            // Read local config to get default project and aliases
+            const config = readNestboxConfig();
+            const localProjects = config.projects || {};
+            const defaultProject = localProjects.default;
+
+            console.log(chalk.blue('Available Projects:'));
+            console.log(''); // Empty line for better formatting
+
+            // Display each project from the API
+            apiProjects.forEach((project: any) => {
+                const projectName = project.name;
+                const isDefault = defaultProject === projectName;
+                
+                // Find aliases for this project
+                const aliases = Object.entries(localProjects)
+                    .filter(([key, value]) => value === projectName && key !== 'default' && key !== projectName)
+                    .map(([alias]) => alias);
+
+                // Build the display line
+                let displayLine = `  ${projectName}`;
+                
+                if (aliases.length > 0) {
+                    displayLine += chalk.gray(` (aliases: ${aliases.join(', ')})`);
+                }
+                
+                if (isDefault) {
+                    displayLine += chalk.green(' [DEFAULT]');
+                }
+
+                console.log(displayLine);
+            });
+
+            // Show summary
+            console.log(''); // Empty line
+            if (defaultProject) {
+                console.log(chalk.gray(`Default project: ${defaultProject}`));
+            } else {
+                console.log(chalk.gray('No default project set. Use "nestbox project use <project-name>" to set one.'));
+            }
+        } catch (error: any) {
+            if (error.message && error.message.includes('Authentication')) {
+                console.error(chalk.red(error.message));
+            } else if (error.message) {
+                console.error(chalk.red('Error listing projects:'), error.message);
+            } else {
+                console.error(chalk.red('Error listing projects:'), 'Unknown error');
+            }
+        }
+    });
 }
