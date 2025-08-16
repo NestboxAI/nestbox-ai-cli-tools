@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { handle401Error, withTokenRefresh } from "../utils/error";
+import { withTokenRefresh } from "../utils/error";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
@@ -11,13 +11,11 @@ import yaml from 'js-yaml';
 import {
   createNestboxConfig,
   createZipFromDirectory,
-  downloadFromGoogleDrive,
   extractZip,
   findProjectRoot,
   isTypeScriptProject,
   loadNestboxConfig,
   runPredeployScripts,
-  TEMPLATES,
 } from "../utils/agent";
 import axios from "axios";
 import { AgentType } from "../types/agentType";
@@ -448,6 +446,7 @@ export function registerAgentCommands(program: Command): void {
 
             // Extract IDs
             const agentId = targetAgent.id;
+            const resolvedEntry = entry || targetAgent.entryFunctionName || "main";
             const instanceId = targetInstance.id;
 
             // Load nestbox.config.json
@@ -524,7 +523,7 @@ export function registerAgentCommands(program: Command): void {
               form.append("file", fs.createReadStream(zipFilePath));
               form.append("machineAgentId", agentId.toString());
               form.append("instanceId", instanceId.toString());
-              form.append("entryFunctionName", entry);
+              form.append("entryFunctionName", resolvedEntry);
               form.append("isSourceCodeUpdate", "true");
               form.append("projectId", projectData.id);
 
@@ -538,16 +537,16 @@ export function registerAgentCommands(program: Command): void {
 
               const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
 
-              console.log(chalk.blue("\nMaking API request:"));
-              console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
-              console.log(chalk.blue(`  Method: PATCH`));
-              console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));
-
               spinner.text = `Sending API request to deploy ${resourceType.toLowerCase()}...`;
               const res = await axiosInstance.patch(endpoint, form);
               
-              console.log(chalk.green("\nAPI Response received:"));
-              console.log(chalk.green(`  Status: ${res.status} ${res.statusText}`));
+              if (res.status !== 200) {
+                console.log(chalk.blue("\nDeployment request:"));
+                console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
+                console.log(chalk.blue(`  Method: PATCH`));
+                console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));  
+                console.log(chalk.blue(`  Response status: ${res.status} ${res.statusText}`));
+              }
 
               if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {
                 fs.unlinkSync(zipFilePath);
