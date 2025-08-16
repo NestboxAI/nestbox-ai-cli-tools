@@ -67,7 +67,8 @@ export function registerImageCommands(program: Command): void {
 
         spinner.succeed('Successfully retrieved images');
 
-        const { project, images } = result;
+        const project: any = result.project;
+        const images: any = result.images;
 
         if (!images || images.length === 0) {
           console.log(chalk.yellow(`No images found for project ${project.name}.`));
