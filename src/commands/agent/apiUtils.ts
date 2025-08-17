@@ -1,5 +1,5 @@
-import { Configuration, MachineAgentApi, MachineInstancesApi, ProjectsApi } from "@nestbox-ai/admin";
-import { setupAuthAndConfig, type AuthResult } from "../../utils/api";
+import { MachineAgentApi, MachineInstancesApi, ProjectsApi } from "@nestbox-ai/admin";
+import { setupAuthAndConfig } from "../../utils/api";
 
 export interface ApiInstances {
   agentsApi: MachineAgentApi;

@@ -1,5 +1,5 @@
-import { Configuration, DocumentsApi, ProjectsApi } from "@nestbox-ai/admin";
-import { setupAuthAndConfig, type AuthResult } from "../../utils/api";
+import { DocumentsApi, ProjectsApi } from "@nestbox-ai/admin";
+import { setupAuthAndConfig } from "../../utils/api";
 
 export interface DocumentApiInstances {
   documentsApi: DocumentsApi;

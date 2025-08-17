@@ -89,11 +89,7 @@ export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_mo
   
   // Create zip in temp directory
   const tempZipFilePath = path.join(os.tmpdir(), `${dirName}_${timestamp}.zip`);
-  
-  // Create zip in Downloads folder (Mac)
-  const downloadsPath = path.join(os.homedir(), 'Downloads');
-  const downloadsZipFilePath = path.join(downloadsPath, `${dirName}_${timestamp}.zip`);
-  
+    
   const zip = new AdmZip();
     
   // Function to recursively add files to zip
