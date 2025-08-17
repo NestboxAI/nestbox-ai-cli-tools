@@ -1,0 +1,18 @@
+var { useChatbot } = require('@nestbox-ai/functions');
+var { Ollama } = require('ollama');
+
+const ollama = new Ollama()
+
+var {{agentName}} = useChatbot(async (context, events) => {
+
+    const response = await ollama.chat({
+        messages: context.messages,
+        model: 'gemma3:27b',
+        stream: false,
+    });
+    const result = response.message.content;
+
+    events.emitQueryCompleted({ data: result });
+});
+
+module.exports = { {{agentName}} };

@@ -1,0 +1,17 @@
+var { useAgent } = require('@nestbox-ai/functions');
+var { Ollama } = require('ollama');
+
+const ollama = new Ollama()
+
+var {{agentName}} = useAgent(async (context, events) => {
+
+    const response = await ollama.generate({
+        prompt: 'Why is the sky blue?',
+        model: 'gemma3:27b',
+    });
+    const result = response.response;
+
+    events.emitQueryCompleted({ data: result });
+});
+
+module.exports = { {{agentName}} };

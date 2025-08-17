@@ -61,9 +61,11 @@
     "inquirer": "^8.2.6",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
+    "node-plop": "^0.32.0",
     "open": "^8.4.2",
     "ora": "5.4.1",
-    "os": "^0.1.2"
+    "os": "^0.1.2",
+    "plop": "^4.0.1"
   },
   "type": "commonjs",
   "engines": {

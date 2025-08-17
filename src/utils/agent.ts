@@ -166,12 +166,6 @@ export const TEMPLATES: Record<string, TemplateInfo> = {
   }
 };
 
-// Helper function to extract zip file
-export function extractZip(zipPath: string, extractPath: string): void {
-  const zip = new AdmZip(zipPath);
-  zip.extractAllTo(extractPath, true);
-}
-
 export function createNestboxConfig(projectPath: string, isTypeScript: boolean): void {
   if (!isTypeScript) return;
 

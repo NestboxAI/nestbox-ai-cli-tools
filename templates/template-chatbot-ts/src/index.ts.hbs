@@ -1,0 +1,18 @@
+import { ChatContext, ChatEvents, useChatbot } from "@nestbox-ai/functions";
+import { Ollama } from "ollama";
+
+const ollama = new Ollama();
+
+export const {{agentName}} = useChatbot(
+  async (context: ChatContext, events: ChatEvents) => {
+    const response = await ollama.chat({
+      messages: context.messages,
+      model: "gemma3:27b",
+      stream: false,
+    });
+    const result = response.response;
+
+    events.emitQueryCompleted({ data: result });
+  }
+);
+

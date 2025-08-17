@@ -4,8 +4,9 @@ import ora from "ora";
 import fs from "fs";
 import {
   createNestboxConfig,
-  extractZip,
 } from "../../utils/agent";
+import { generateWithPlop, listAvailableTemplates } from "../../utils/plopGenerator";
+import { isValidFunctionName } from "../../utils/validation";
 import inquirer from "inquirer";
 import path from "path";
 
@@ -15,6 +16,7 @@ export function registerGenerateCommand(agentCommand: Command): void {
     .description("Generate a new project from templates")
     .option("--lang <language>", "Project language (ts|js)")
     .option("--template <type>", "Template type (agent|chatbot)")
+    .option("--name <agentName>", "Agent/Chatbot name (must be a valid function name)")
     .option("--project <projectId>", "Project ID")
     .action(async (folder, options) => {
       try {
@@ -28,6 +30,7 @@ export function registerGenerateCommand(agentCommand: Command): void {
 
         let selectedLang = options.lang;
         let selectedTemplate = options.template;
+        let agentName = options.name;
 
         // Interactive selection if not provided
         if (!selectedLang || !selectedTemplate) {
@@ -53,13 +56,44 @@ export function registerGenerateCommand(agentCommand: Command): void {
                 { name: 'Chatbot', value: 'chatbot' }
               ],
               when: () => !selectedTemplate
+            },
+            {
+              type: 'input',
+              name: 'agentName',
+              message: 'Enter agent/chatbot name (must be a valid function name):',
+              when: () => !agentName,
+              default: (answers: any) => {
+                const type = selectedTemplate || answers.template;
+                return type === 'agent' ? 'myAgent' : 'myChatbot';
+              },
+              validate: (input: string) => {
+                if (!input.trim()) {
+                  return 'Agent name cannot be empty';
+                }
+                if (!isValidFunctionName(input.trim())) {
+                  return 'Must be a valid function name (e.g., myAgent, chatBot123, my_agent)';
+                }
+                return true;
+              }
             }
           ]);
 
           selectedLang = selectedLang || answers.lang;
           selectedTemplate = selectedTemplate || answers.template;
+          agentName = agentName || answers.agentName;
           
           spinner.start("Generating project...");
+        }
+
+        // Validate agent name if provided via CLI option
+        if (agentName && !isValidFunctionName(agentName)) {
+          spinner.fail(`Invalid agent name: "${agentName}". Must be a valid function name (e.g., myAgent, chatBot123, my_agent)`);
+          return;
+        }
+
+        // Set default agent name if not provided
+        if (!agentName) {
+          agentName = selectedTemplate === 'agent' ? 'myAgent' : 'myChatbot';
         }
 
         // Find matching template in local templates folder
@@ -68,60 +102,33 @@ export function registerGenerateCommand(agentCommand: Command): void {
           'chatbot': 'chatbot'
         };
         const mappedTemplateType = templateMapping[selectedTemplate] || selectedTemplate;
-        const templateKey = `template-${mappedTemplateType}-${selectedLang}.zip`;
         
-        // Try process.cwd() first, then __dirname fallback
-        let templatePath = path.resolve(process.cwd(), 'templates', templateKey);
-        if (!fs.existsSync(templatePath)) {
-          // fallback to __dirname
-          templatePath = path.resolve(__dirname, '../../../templates', templateKey);
-        }
+        // Check if template directory exists
+        const templatePath = path.resolve(__dirname, `../../../templates/template-${mappedTemplateType}-${selectedLang}`);
         
         if (!fs.existsSync(templatePath)) {
           spinner.fail(`Template not found: ${templatePath}`);
-          // Show available templates in both locations
-          const cwdTemplates = path.resolve(process.cwd(), 'templates');
-          const dirTemplates = path.resolve(__dirname, '../../../templates');
-          let shown = false;
-          
-          if (fs.existsSync(cwdTemplates)) {
-            console.log(chalk.yellow('Available templates in ./templates:'));
-            fs.readdirSync(cwdTemplates).forEach(file => {
-              console.log(chalk.yellow(`  - ${file}`));
+          // Show available templates
+          const availableTemplates = listAvailableTemplates();
+          if (availableTemplates.length > 0) {
+            console.log(chalk.yellow('Available templates:'));
+            availableTemplates.forEach(template => {
+              console.log(chalk.yellow(`  - ${template}`));
             });
-            shown = true;
-          }
-          
-          if (fs.existsSync(dirTemplates)) {
-            console.log(chalk.yellow('Available templates in templates:'));
-            fs.readdirSync(dirTemplates).forEach(file => {
-              console.log(chalk.yellow(`  - ${file}`));
-            });
-            shown = true;
-          }
-          
-          if (!shown) {
-            console.log(chalk.red('No templates directory found. Please add your templates.'));
+          } else {
+            console.log(chalk.red('No templates found. Please add your templates to the templates directory.'));
           }
           return;
         }
 
-        spinner.text = `Extracting template to ${folder}...`;
+        spinner.text = `Generating ${mappedTemplateType} project in ${folder}...`;
 
         try {
-          // Extract template to target folder
-          extractZip(templatePath, folder);
+          // Generate project using plop
+          await generateWithPlop(selectedTemplate, selectedLang, folder, path.basename(folder), agentName);
 
           // Create nestbox.config.json for TypeScript projects
           createNestboxConfig(folder, selectedLang === 'ts');
-
-          // Update package.json with project name if it exists
-          const packageJsonPath = path.join(folder, 'package.json');
-          if (fs.existsSync(packageJsonPath)) {
-            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-            packageJson.name = path.basename(folder);
-            fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
-          }
 
           spinner.succeed(`Successfully generated ${mappedTemplateType} project in ${folder}`);
           
