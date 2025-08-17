@@ -218,7 +218,7 @@ export function registerDeployCommand(agentCommand: Command): void {
 
               const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
 
-              spinner.text = `Sending API request to deploy ${resourceType.toLowerCase()}...`;
+              spinner.text = `Deploy ${resourceType.toLowerCase()} ${agentName}...`;
               const res = await axiosInstance.patch(endpoint, form);
               
               if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {

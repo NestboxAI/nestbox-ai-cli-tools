@@ -83,7 +83,7 @@ export async function runPredeployScripts(scripts: any, projectRoot: any) {
   }
 }
 
-export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_modules', 'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock']) {
+export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_modules']) {
   const dirName = path.basename(dirPath);
   const timestamp = Date.now();
   
