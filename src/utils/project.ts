@@ -1,6 +1,6 @@
 import { ProjectsApi } from "@nestbox-ai/admin";
 import ora from "ora";
-import { readNestboxConfig } from "../commands/projects";
+import { readNestboxConfig } from "./config";
 
 interface ProjectInfo {
     id: string;

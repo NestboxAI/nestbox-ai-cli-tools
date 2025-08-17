@@ -17,12 +17,3 @@ export function registerProjectCommands(program: Command): void {
   registerAddCommand(projectCommand);
   registerListCommand(projectCommand);
 }
-
-// Export project utilities for use in other modules
-export { 
-  readNestboxConfig, 
-  writeNestboxConfig, 
-  getNestboxConfigPath,
-  type ProjectsConfig,
-  type NestboxConfig 
-} from "./project";

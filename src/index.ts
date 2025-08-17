@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { registerAuthCommands } from './commands/auth';
-import { registerProjectCommands } from './commands/projects';
+import { registerProjectCommands } from './commands/project';
 import { registerComputeProgram } from './commands/compute';
 import { registerDocumentCommands } from './commands/document';
 import { registerImageCommands } from './commands/image';

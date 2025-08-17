@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { withTokenRefresh } from "../../utils/error";
 import chalk from "chalk";
-import { readNestboxConfig } from "./config";
+import { readNestboxConfig } from "../../utils/config";
 import { createApis } from "./apiUtils";
 
 export function registerListCommand(projectCommand: Command): void {

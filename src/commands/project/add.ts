@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { readNestboxConfig, writeNestboxConfig } from "./config";
+import { readNestboxConfig, writeNestboxConfig } from "../../utils/config";
 import { createApis } from "./apiUtils";
 
 export function registerAddCommand(projectCommand: Command): void {
