@@ -10,9 +10,9 @@ import { isValidFunctionName } from "../../utils/validation";
 import inquirer from "inquirer";
 import path from "path";
 
-export function registerGenerateCommand(agentCommand: Command): void {
-  agentCommand
-    .command("generate <folder>")
+export function registerProjectCommand(generateCommand: Command): void {
+  generateCommand
+    .command("project <folder>")
     .description("Generate a new project from templates")
     .option("--lang <language>", "Project language (ts|js)")
     .option("--template <type>", "Template type (agent|chatbot)")
@@ -104,7 +104,7 @@ export function registerGenerateCommand(agentCommand: Command): void {
         const mappedTemplateType = templateMapping[selectedTemplate] || selectedTemplate;
         
         // Check if template directory exists
-        const templatePath = path.resolve(__dirname, `../../../templates/${mappedTemplateType}-${selectedLang}`);
+        const templatePath = path.resolve(__dirname, `../../../../templates/${mappedTemplateType}-${selectedLang}`);
         
         if (!fs.existsSync(templatePath)) {
           spinner.fail(`Template not found: ${templatePath}`);

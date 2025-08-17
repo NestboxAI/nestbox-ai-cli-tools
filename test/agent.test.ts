@@ -78,20 +78,6 @@ describe('Agent Commands', () => {
       expect(instanceOption).toBeDefined();
     });
 
-    it('should register agent generate subcommand', () => {
-      registerAgentCommands(program);
-
-      const agentCommand = program.commands.find(cmd => cmd.name() === 'agent');
-      const subCommands = agentCommand?.commands || [];
-      const generateCommand = subCommands.find(cmd => cmd.name() === 'generate');
-
-      expect(generateCommand).toBeDefined();
-      expect(generateCommand?.description()).toBe('Generate a new project from templates');
-      
-      // Check that folder is an argument (it's in command name: "generate <folder>")
-      expect(generateCommand?.name()).toBe('generate');
-    });
-
     it('should register agent create subcommand', () => {
       registerAgentCommands(program);
 
@@ -121,9 +107,8 @@ describe('Agent Commands', () => {
       expect(subCommandNames).toContain('list');
       expect(subCommandNames).toContain('remove');
       expect(subCommandNames).toContain('deploy');
-      expect(subCommandNames).toContain('generate');
       expect(subCommandNames).toContain('create');
-      expect(subCommandNames).toHaveLength(5);
+      expect(subCommandNames).toHaveLength(4);
     });
 
     it('should have proper action functions for all subcommands', () => {

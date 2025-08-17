@@ -9,6 +9,7 @@ import { registerComputeProgram } from './commands/compute';
 import { registerDocumentCommands } from './commands/document';
 import { registerImageCommands } from './commands/image';
 import { registerAgentCommands } from './commands/agent';
+import { registerGenerateCommands } from './commands/generate';
 
 // Read version from package.json
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
@@ -25,6 +26,7 @@ registerAuthCommands(program);
 registerProjectCommands(program);
 registerComputeProgram(program);
 registerAgentCommands(program);
+registerGenerateCommands(program);
 registerDocumentCommands(program);
 registerImageCommands(program);
 

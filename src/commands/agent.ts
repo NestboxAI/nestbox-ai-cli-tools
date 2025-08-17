@@ -2,7 +2,6 @@ import { Command } from "commander";
 import { registerListCommand } from "./agent/list";
 import { registerRemoveCommand } from "./agent/remove";
 import { registerDeployCommand } from "./agent/deploy";
-import { registerGenerateCommand } from "./agent/generate";
 import { registerCreateFromYamlCommand } from "./agent/createFromYaml";
 
 /**
@@ -18,6 +17,5 @@ export function registerAgentCommands(program: Command): void {
   registerListCommand(agentCommand);
   registerRemoveCommand(agentCommand);
   registerDeployCommand(agentCommand);
-  registerGenerateCommand(agentCommand);
   registerCreateFromYamlCommand(agentCommand);
 }

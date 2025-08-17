@@ -5,7 +5,6 @@ export { createAgent, type CreateAgentOptions } from "./create";
 export { registerListCommand } from "./list";
 export { registerRemoveCommand } from "./remove";
 export { registerDeployCommand } from "./deploy";
-export { registerGenerateCommand } from "./generate";
 export { registerCreateFromYamlCommand } from "./createFromYaml";
 
 // API utilities
