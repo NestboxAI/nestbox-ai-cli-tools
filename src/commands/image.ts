@@ -13,10 +13,3 @@ export function registerImageCommands(program: Command): void {
   // Register all subcommands
   registerListCommand(imageCommand);
 }
-
-// Export image utilities for use in other modules
-export { 
-  displayImagesTable, 
-  statusMappings 
-} from "./image/display";
-export type { ApiInstances } from "./image/apiUtils";

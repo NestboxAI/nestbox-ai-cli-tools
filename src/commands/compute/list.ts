@@ -4,6 +4,7 @@ import ora from "ora";
 import Table from "cli-table3";
 import { resolveProject } from "../../utils/project";
 import { createComputeApis } from "./apiUtils";
+import { statusMappings } from "../../types/statusMapping";
 
 export function registerListCommand(computeCommand: Command): void {
   computeCommand
@@ -54,16 +55,7 @@ export function registerListCommand(computeCommand: Command): void {
               border: []
             }
           });
-          
-          // Status mappings
-          const statusMappings: any = {
-            'Job Scheduled': 'Scheduled',
-            'Job Executed': 'Ready',
-            'Job in Progress': 'Initializing',
-            'Job Failed': 'Failed',
-            'Deleting': 'Deleting',
-          };
-          
+                    
           // Add rows to the table
           instances.forEach((instance: any) => {
             // Map the status if a mapping exists

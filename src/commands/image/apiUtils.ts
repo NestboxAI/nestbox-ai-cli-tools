@@ -1,5 +1,5 @@
-import { Configuration, MiscellaneousApi, ProjectsApi } from "@nestbox-ai/admin";
-import { setupAuthAndConfig, type AuthResult } from "../../utils/api";
+import { MiscellaneousApi, ProjectsApi } from "@nestbox-ai/admin";
+import { setupAuthAndConfig } from "../../utils/api";
 
 export interface ApiInstances {
   miscellaneousApi: MiscellaneousApi;

@@ -21,6 +21,3 @@ export function registerAgentCommands(program: Command): void {
   registerGenerateCommand(agentCommand);
   registerCreateFromYamlCommand(agentCommand);
 }
-
-// Export the createAgent function for use in other modules
-export { createAgent, type CreateAgentOptions } from "./agent/create";

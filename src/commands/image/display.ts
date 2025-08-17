@@ -17,16 +17,7 @@ export function displayImagesTable(images: any[]): void {
       border: []
     }
   });
-  
-  // Status mappings (kept from original code for potential future use)
-  const statusMappings: Record<string, string> = {
-    'Job Scheduled': 'Scheduled',
-    'Job Executed': 'Ready',
-    'Job in Progress': 'Initializing',
-    'Job Failed': 'Failed',
-    'Deleting': 'Deleting',
-  };
-  
+    
   // Add rows to the table
   images.forEach((image: any) => {
     table.push([
@@ -41,12 +32,3 @@ export function displayImagesTable(images: any[]): void {
   
   console.log(table.toString());
 }
-
-// Export status mappings for potential future use
-export const statusMappings: Record<string, string> = {
-  'Job Scheduled': 'Scheduled',
-  'Job Executed': 'Ready',
-  'Job in Progress': 'Initializing',
-  'Job Failed': 'Failed',
-  'Deleting': 'Deleting',
-};
