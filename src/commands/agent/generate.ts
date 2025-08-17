@@ -104,7 +104,7 @@ export function registerGenerateCommand(agentCommand: Command): void {
         const mappedTemplateType = templateMapping[selectedTemplate] || selectedTemplate;
         
         // Check if template directory exists
-        const templatePath = path.resolve(__dirname, `../../../templates/template-${mappedTemplateType}-${selectedLang}`);
+        const templatePath = path.resolve(__dirname, `../../../templates/${mappedTemplateType}-${selectedLang}`);
         
         if (!fs.existsSync(templatePath)) {
           spinner.fail(`Template not found: ${templatePath}`);

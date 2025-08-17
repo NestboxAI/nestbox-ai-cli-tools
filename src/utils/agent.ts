@@ -135,37 +135,6 @@ export interface TemplateInfo {
   type: string;
 }
 
-export const TEMPLATES: Record<string, TemplateInfo> = {
-  'template-base-js.zip': {
-    name: 'Base JavaScript Agent',
-    description: 'Basic JavaScript agent template',
-    fileId: '1EYaa4eZWDc3HiaSnauXgW7oLJYzqOhPZ', // Replace with actual file ID
-    lang: 'js',
-    type: 'agent'
-  },
-  'template-base-ts.zip': {
-    name: 'Base TypeScript Agent',
-    description: 'Basic TypeScript agent template',
-    fileId: '1kk2JWlgeRuNOGpz8wsZUTD115qfNzWk5', // Replace with actual file ID
-    lang: 'ts',
-    type: 'agent'
-  },
-  'template-chatbot-js.zip': {
-    name: 'JavaScript Chatbot',
-    description: 'JavaScript chatbot template',
-    fileId: '1b4c4NQa_Qm85-GwObn52D-bEKz48zh9O', // Replace with actual file ID
-    lang: 'js',
-    type: 'chatbot'
-  },
-  'template-chatbot-ts.zip': {
-    name: 'TypeScript Chatbot',
-    description: 'TypeScript chatbot template',
-    fileId: '1vbA5Jlet3XIRMQ4NSsMsLMeHt-mUhRTe', // Replace with actual file ID
-    lang: 'ts',
-    type: 'chatbot'
-  }
-};
-
 export function createNestboxConfig(projectPath: string, isTypeScript: boolean): void {
   if (!isTypeScript) return;
 

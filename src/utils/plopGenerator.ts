@@ -38,7 +38,7 @@ export async function generateWithPlop(
   };
   
   const mappedTemplateType = templateMapping[templateType] || templateType;
-  const templatePath = path.resolve(__dirname, `../../templates/template-${mappedTemplateType}-${language}`);
+  const templatePath = path.resolve(__dirname, `../../templates/${mappedTemplateType}-${language}`);
   
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template not found: ${templatePath}`);
@@ -105,7 +105,7 @@ export function listAvailableTemplates(): string[] {
   return fs.readdirSync(templatesDir)
     .filter(item => {
       const itemPath = path.join(templatesDir, item);
-      return fs.statSync(itemPath).isDirectory() && item.startsWith('template-');
+      return fs.statSync(itemPath).isDirectory();
     })
-    .map(item => item.replace('template-', '').replace(/\.(ts|js)$/, ''));
+    .map(item => item.replace(/\.(ts|js)$/, ''));
 }
