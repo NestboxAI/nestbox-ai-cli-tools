@@ -112,5 +112,7 @@
     "declaration": true,
     "sourceMap": true,
     "resolveJsonModule": true
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
 }

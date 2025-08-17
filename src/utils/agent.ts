@@ -83,45 +83,6 @@ export async function runPredeployScripts(scripts: any, projectRoot: any) {
   }
 }
 
-// Function to create zip from directory excluding node_modules
-// export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_modules']) {
-//   const dirName = path.basename(dirPath);
-//   const zipFilePath = path.join(os.tmpdir(), `${dirName}_${Date.now()}.zip`);
-  
-//   const zip = new AdmZip();
-    
-//   // Function to recursively add files to zip
-//   function addFilesToZip(currentPath: any, relativePath = '') {
-//     const items = fs.readdirSync(currentPath);
-    
-//     for (const item of items) {
-//       const itemPath = path.join(currentPath, item);
-//       const itemRelativePath = path.join(relativePath, item);
-      
-//       // Check if item should be excluded
-//       if (excludePatterns.some(pattern => 
-//         typeof pattern === 'string' ? itemRelativePath === pattern || item === pattern : 
-//         pattern.test(itemRelativePath)
-//       )) {
-//         continue;
-//       }
-      
-//       const stats = fs.statSync(itemPath);
-      
-//       if (stats.isDirectory()) {
-//         addFilesToZip(itemPath, itemRelativePath);
-//       } else {
-//         zip.addLocalFile(itemPath, path.dirname(itemRelativePath));
-//       }
-//     }
-//   }
-  
-//   addFilesToZip(dirPath);
-//   zip.writeZip(zipFilePath);
-  
-//   return zipFilePath;
-// }
-
 export function createZipFromDirectory(dirPath: any, excludePatterns = ['node_modules', 'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock']) {
   const dirName = path.basename(dirPath);
   const timestamp = Date.now();
@@ -208,24 +169,6 @@ export const TEMPLATES: Record<string, TemplateInfo> = {
     type: 'chatbot'
   }
 };
-
-export async function downloadFromGoogleDrive(fileId: string, outputPath: string): Promise<void> {
-  const url = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  
-  const response = await axios({
-    method: 'GET',
-    url: url,
-    responseType: 'stream',
-  });
-
-  const writer = fs.createWriteStream(outputPath);
-  response.data.pipe(writer);
-
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-  });
-}
 
 // Helper function to extract zip file
 export function extractZip(zipPath: string, extractPath: string): void {
