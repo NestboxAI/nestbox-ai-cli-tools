@@ -362,7 +362,8 @@ export function registerAgentCommands(program: Command): void {
       "--project <projectName>",
       "Project name (defaults to the current project)"
     )
-    .option("--entry <entryFunction>", "Entry function name", "main")
+    .option("--entry <entryFunction>", "Entry function name")
+    .option("--log", "Show detailed logs during deployment")
     .action(async (options) => {
       try {
         const {
@@ -371,6 +372,7 @@ export function registerAgentCommands(program: Command): void {
           instance: instanceName,
           zip: customZipPath,
           entry,
+          log,
         } = options;
         
         // Ensure either agent or chatbot is provided, but not both
@@ -527,6 +529,15 @@ export function registerAgentCommands(program: Command): void {
               form.append("isSourceCodeUpdate", "true");
               form.append("projectId", projectData.id);
 
+              if (log) {
+                console.log(chalk.blue("Form Details "));
+                console.log(chalk.blue(`  - File: ${path.basename(zipFilePath)}`));
+                console.log(chalk.blue(`  - Agent ID: ${agentId}`));
+                console.log(chalk.blue(`  - Instance ID: ${instanceId}`));
+                console.log(chalk.blue(`  - Entry Function: ${resolvedEntry}`));
+                console.log(chalk.blue(`  - Project ID: ${projectData.id}`));
+              }
+
               const axiosInstance = axios.create({
                 baseURL: baseUrl,
                 headers: {
@@ -540,20 +551,27 @@ export function registerAgentCommands(program: Command): void {
               spinner.text = `Sending API request to deploy ${resourceType.toLowerCase()}...`;
               const res = await axiosInstance.patch(endpoint, form);
               
-              if (res.status !== 200) {
-                console.log(chalk.blue("\nDeployment request:"));
-                console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
-                console.log(chalk.blue(`  Method: PATCH`));
-                console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));  
-                console.log(chalk.blue(`  Response status: ${res.status} ${res.statusText}`));
+              if (log) {
               }
 
               if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {
                 fs.unlinkSync(zipFilePath);
               }
 
+              if (log) {
+                console.log(chalk.blue("\nDeployment request:"));
+                console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
+                console.log(chalk.blue(`  Method: PATCH`));
+                console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));  
+                console.log(chalk.blue(`  Response status: ${res.status} ${res.statusText}`));
+                const lines = res.data.logEntries || [];
+                console.log(chalk.blue(`  Deployment log entries (${lines.length} lines):`));
+                lines.forEach((line:  any) => {
+                  console.log(chalk.blue(`    - [${line.type} ${line.timestamp}] ${line.message} `));
+                });
+              }
               spinner.succeed(
-                `Successfully deployed ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}`
+                `Successfully deployed to ${instanceName}, agent ${agentName} (${agentId}), entry: ${resolvedEntry}, process: ${res.data.processName}`
               );
               console.log(chalk.green(`${resourceType} deployed successfully`));
             } catch (error: any) {
