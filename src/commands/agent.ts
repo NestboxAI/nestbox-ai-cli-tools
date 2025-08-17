@@ -570,10 +570,12 @@ export function registerAgentCommands(program: Command): void {
                   console.log(chalk.blue(`    - [${line.type} ${line.timestamp}] ${line.message} `));
                 });
               }
-              spinner.succeed(
-                `Successfully deployed to ${instanceName}, agent ${agentName} (${agentId}), entry: ${resolvedEntry}, process: ${res.data.processName}`
-              );
-              console.log(chalk.green(`${resourceType} deployed successfully`));
+              spinner.succeed("Successfully deployed");
+              console.log(chalk.green(`${resourceType} deployed successfully!`));
+              console.log(chalk.cyan(`📍 Instance: ${instanceName}`));
+              console.log(chalk.cyan(`🤖 Agent: ${agentName} (${agentId})`));
+              console.log(chalk.cyan(`⚙️ Entry: ${resolvedEntry}`));
+              console.log(chalk.cyan(`🔄 Process: ${res.data.processName}`));
             } catch (error: any) {
               spinner.fail(`Failed to deploy ${resourceType.toLowerCase()}`);
               throw error;
