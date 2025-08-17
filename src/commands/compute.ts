@@ -2,30 +2,21 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
-import { getAuthToken } from "../utils/auth";
-import { Configuration, ProjectsApi, MachineInstancesApi, MiscellaneousApi } from "@nestbox-ai/admin";
+import { ProjectsApi, MachineInstancesApi, MiscellaneousApi } from "@nestbox-ai/admin";
 import { resolveProject } from "../utils/project";
+import { setupAuthAndConfig } from "../utils/api";
 import inquirer from "inquirer";
 import axios from "axios";
 import { userData } from "../utils/user";
 
 export function registerComputeProgram(program: Command): void {
-    const authToken = getAuthToken();
+    const authResult = setupAuthAndConfig();
     
-    if (!authToken) {
-        console.error(chalk.red('No authentication token found. Please login first.'));
+    if (!authResult) {
         return;
     }
-    
-    const configuration = new Configuration({
-        basePath: authToken.serverUrl,
-        baseOptions: {
-            headers: {
-                "Authorization": authToken.token,
-            }
-        }
-    });
 
+    const { authToken, configuration } = authResult;
     const machineInstanceApi = new MachineInstancesApi(configuration);
     const miscellaneousApi = new MiscellaneousApi(configuration);
     const projectsApi = new ProjectsApi(configuration);

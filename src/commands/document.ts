@@ -1,11 +1,9 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { getAuthToken } from '../utils/auth';
-import { Configuration, DocumentsApi, ProjectsApi } from '@nestbox-ai/admin';
-import { readNestboxConfig } from './projects';
+import { DocumentsApi, ProjectsApi } from '@nestbox-ai/admin';
 import { resolveProject } from '../utils/project';
-import { handle401Error } from '../utils/error';
+import { setupAuthAndConfig } from '../utils/api';
 
 
 /**
@@ -24,8 +22,9 @@ async function executeCommand<T>(
     return result;
   } catch (error: any) {
     spinner.fail('Operation failed');
-    handle401Error(error);
-    if (error.response?.data?.message) {
+    if (error.response && error.response.status === 401) {
+      console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+    } else if (error.response?.data?.message) {
       console.error(chalk.red('API Error:'), error.response.data.message);
     } else {
       console.error(chalk.red('Error:'), error.message || 'Unknown error');
@@ -35,22 +34,13 @@ async function executeCommand<T>(
 }
 
 export function registerDocumentCommands(program: Command): void {
-  const authToken = getAuthToken();
-
-  if (!authToken) {
-    console.error(chalk.red('No authentication token found. Please login first.'));
+  const authResult = setupAuthAndConfig();
+  
+  if (!authResult) {
     return;
   }
 
-  const configuration = new Configuration({
-    basePath: authToken.serverUrl,
-    baseOptions: {
-      headers: {
-        Authorization: authToken.token,
-      },
-    },
-  });
-
+  const { authToken, configuration } = authResult;
   const documentsApi = new DocumentsApi(configuration);
   const projectsApi = new ProjectsApi(configuration);
 

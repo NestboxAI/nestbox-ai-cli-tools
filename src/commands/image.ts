@@ -2,33 +2,20 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import Table from 'cli-table3';
-import { getAuthToken } from '../utils/auth';
-import { Configuration, MiscellaneousApi, ProjectsApi } from '@nestbox-ai/admin';
+import { MiscellaneousApi, ProjectsApi } from '@nestbox-ai/admin';
 import { resolveProject } from '../utils/project';
-import { withTokenRefresh } from '../utils/error';
+import { setupAuthAndConfig } from '../utils/api';
 
 export function registerImageCommands(program: Command): void {
-  // Function to create/recreate API instances
-  const createApis = () => {
-    const authToken = getAuthToken();
-    if (!authToken) {
-      throw new Error('No authentication token found. Please log in first.');
-    }
-    
-    const configuration = new Configuration({
-      basePath: authToken.serverUrl,
-      baseOptions: {
-        headers: {
-          Authorization: authToken.token,
-        },
-      },
-    });
+  const authResult = setupAuthAndConfig();
+  
+  if (!authResult) {
+    return;
+  }
 
-    return {
-      miscellaneousApi: new MiscellaneousApi(configuration),
-      projectsApi: new ProjectsApi(configuration)
-    };
-  };
+  const { configuration } = authResult;
+  const miscellaneousApi = new MiscellaneousApi(configuration);
+  const projectsApi = new ProjectsApi(configuration);
 
   const imageCommand = program.command('image').description('Manage Nestbox images');
 
@@ -38,49 +25,43 @@ export function registerImageCommands(program: Command): void {
     .description('List images for a project')
     .option('--project <projectId>', 'Project ID or name (defaults to the current project)')
     .action(async (options) => {
-      const spinner = ora('Processing...').start();
-      
       try {
-        let apis = createApis();
+        // Resolve project using the shared utility
+        const project = await resolveProject(projectsApi, options);
         
-        // Execute all operations with token refresh support
-        const result = await withTokenRefresh(
-          async () => {
-            // Resolve project without showing its own spinner
-            spinner.text = 'Resolving project...';
-            const project = await resolveProject(apis.projectsApi, { 
-              ...options, 
-              showSpinner: false  // Disable resolveProject's spinner
-            });
-            
-            // Fetch images
-            spinner.text = `Listing images for project ${project.name}...`;
-            const response = await apis.miscellaneousApi.miscellaneousControllerGetData();
-            
-            return { project, images: response.data };
-          },
-          () => {
-            // Recreate APIs after token refresh
-            apis = createApis();
+        const spinner = ora(`Listing images for project ${project.name}...`).start();
+        
+        try {
+          const response = await miscellaneousApi.miscellaneousControllerGetData();
+          
+          spinner.succeed('Successfully retrieved images');
+
+          const images: any = response.data;
+
+          if (!images || images.length === 0) {
+            console.log(chalk.yellow(`No images found for project ${project.name}.`));
+            return;
           }
-        );
 
-        spinner.succeed('Successfully retrieved images');
+          // Create and display the table
+          displayImagesTable(images);
 
-        const project: any = result.project;
-        const images: any = result.images;
-
-        if (!images || images.length === 0) {
-          console.log(chalk.yellow(`No images found for project ${project.name}.`));
-          return;
+        } catch (error: any) {
+          spinner.fail('Failed to retrieve images');
+          if (error.response && error.response.status === 401) {
+            console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+          } else if (error.response) {
+            console.error(chalk.red('API Error:'), error.response.data?.message || 'Unknown error');
+          } else {
+            console.error(chalk.red('Error:'), error.message || 'Unknown error');
+          }
         }
-
-        // Create and display the table
-        displayImagesTable(images);
-
       } catch (error: any) {
-        spinner.fail('Operation failed');
-        handleError(error);
+        if (error.response && error.response.status === 401) {
+          console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+        } else {
+          console.error(chalk.red('Error:'), error.message || 'Unknown error');
+        }
       }
     });
 
@@ -126,22 +107,4 @@ function displayImagesTable(images: any[]): void {
   });
   
   console.log(table.toString());
-}
-
-// Helper function to handle errors
-function handleError(error: any): void {
-  if (error.message) {
-    if (error.message.includes('Authentication')) {
-      console.error(chalk.red(error.message));
-    } else if (error.message.includes('No project')) {
-      // Project-related errors are already well-formatted
-      console.error(chalk.red(error.message));
-    } else {
-      console.error(chalk.red('Error:'), error.message);
-    }
-  } else if (error.response?.data?.message) {
-    console.error(chalk.red('API Error:'), error.response.data.message);
-  } else {
-    console.error(chalk.red('Error:'), 'Unknown error occurred');
-  }
 }

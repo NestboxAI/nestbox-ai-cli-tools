@@ -7,7 +7,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { getAuthToken, listCredentials, removeCredentials } from '../utils/auth';
-import { AuthApi, Configuration, OAuthLoginRequestDTOTypeEnum, ProjectsApi } from '@nestbox-ai/admin';
+import { AuthApi, Configuration, OAuthLoginRequestDTOTypeEnum } from '@nestbox-ai/admin';
 import axios from 'axios';
 
 

@@ -1,10 +1,9 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { withTokenRefresh } from '../utils/error';
 import fs from 'fs';
 import path from 'path';
-import { getAuthToken } from '../utils/auth';
-import { Configuration, ProjectsApi } from '@nestbox-ai/admin';
+import { ProjectsApi } from '@nestbox-ai/admin';
+import { setupAuthAndConfig } from '../utils/api';
 
 // Define a type for the projects configuration
 interface ProjectsConfig {
@@ -40,24 +39,14 @@ export function writeNestboxConfig(config: NestboxConfig): void {
 }
 
 export function registerProjectCommands(program: Command): void {
-    // Function to create/recreate the ProjectsApi instance
-    const createProjectsApi = () => {
-        const authToken = getAuthToken();
-        if (!authToken) {
-            throw new Error('No authentication token found. Please log in first.');
-        }
-        
-        const configuration = new Configuration({
-            basePath: authToken.serverUrl,
-            baseOptions: {
-                headers: {
-                    "Authorization": authToken.token,
-                }
-            }
-        });
-        
-        return new ProjectsApi(configuration);
-    };
+    const authResult = setupAuthAndConfig();
+    
+    if (!authResult) {
+        return;
+    }
+
+    const { authToken, configuration } = authResult;
+    const projectsApi = new ProjectsApi(configuration);
 
     // Create the main project command
     const projectCommand = program
@@ -74,24 +63,20 @@ export function registerProjectCommands(program: Command): void {
                 config.projects = config.projects || {};
                 config.projects.default = projectName;
 
-                let projectsApi = createProjectsApi();
-
-                // Use withTokenRefresh wrapper for automatic retry
-                const response = await withTokenRefresh(
-                    async () => {
-                        return await projectsApi.projectControllerGetAllProjects();
-                    },
-                    // Recreate the API client after token refresh
-                    () => {
-                        projectsApi = createProjectsApi();
-                    }
-                );
-                
                 // Check if the project exists
-                const projectExists = response.data.data.projects.some((project: any) => project.name === projectName);
-                if (!projectExists) {
-                    console.error(chalk.red(`Project '${projectName}' does not exist.`));
-                    return;
+                try {
+                    const response = await projectsApi.projectControllerGetAllProjects();
+                    const projectExists = response.data.data.projects.some((project: any) => project.name === projectName);
+                    if (!projectExists) {
+                        console.error(chalk.red(`Project '${projectName}' does not exist.`));
+                        return;
+                    }
+                } catch (error: any) {
+                    if (error.response && error.response.status === 401) {
+                        console.error(chalk.red('Authentication token has expired. Please login again using "nestbox login <domain>".'));
+                        return;
+                    }
+                    throw error;
                 }
                 
                 // Write the configuration
@@ -114,7 +99,6 @@ export function registerProjectCommands(program: Command): void {
         .description('Add a project with optional alias')
         .action((projectName: string, alias?: string) => {
             try {
-                const authToken = getAuthToken();
                 if (!authToken) {
                     console.error(chalk.red('No authentication token found. Please log in first.'));
                     return;
@@ -158,19 +142,8 @@ export function registerProjectCommands(program: Command): void {
     .description('List all projects')
     .action(async () => {
         try {
-            let projectsApi = createProjectsApi();
-                
-                // Use withTokenRefresh wrapper for automatic retry
-                const response = await withTokenRefresh(
-                    async () => {
-                        return await projectsApi.projectControllerGetAllProjects();
-                    },
-                    // Recreate the API client after token refresh
-                    () => {
-                        projectsApi = createProjectsApi();
-                    }
-                );
-
+            // Get projects from API
+            const response = await projectsApi.projectControllerGetAllProjects();
             const apiProjects = response.data.data.projects;
 
             if (!apiProjects || apiProjects.length === 0) {
