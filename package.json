@@ -13,6 +13,7 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "vitest",
+    "test:ci": "vitest run --reporter=verbose",
     "coverage": "vitest run --coverage",
     "clean": "rimraf dist"
   },
