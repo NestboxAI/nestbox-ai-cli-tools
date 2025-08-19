@@ -56,20 +56,40 @@ nestbox compute status <compute-id>
 
 Create a new agent project from templates:
 ```bash
-nestbox generate project <folder-name>
+nestbox generate project <folder> --lang <ts|js> --template <agent|chatbot> --name <agent-name>
 ```
 
-Available templates:
-- `base-js` - Basic JavaScript agent
-- `base-ts` - Basic TypeScript agent  
-- `chatbot-js` - JavaScript chatbot agent
-- `chatbot-ts` - TypeScript chatbot agent
+Example - TypeScript agent:
+```bash
+nestbox generate project my-agent --lang ts --template agent --name myAgent
+```
+
+Example - JavaScript chatbot:
+```bash
+nestbox generate project my-chatbot --lang js --template chatbot --name myChatbot --project my-project-id
+```
+
+Available options:
+- `--lang`: Choose `ts` (TypeScript) or `js` (JavaScript)
+- `--template`: Choose `agent` or `chatbot`
+- `--name`: Agent/Chatbot name (must be valid function name)
+- `--project`: Optional project ID
 
 ### 5. Deploy Your Agent
 
 From your agent directory:
 ```bash
-nestbox agent deploy
+nestbox agent deploy --agent <agent-name> --project <project-name>
+```
+
+Deploy with detailed logs:
+```bash
+nestbox agent deploy --agent <agent-name> --project <project-name> --log
+```
+
+Deploy a specific zip or directory:
+```bash
+nestbox agent deploy --agent <agent-name> --zip ./path/to/agent --project <project-name>
 ```
 
 List deployed agents:
@@ -87,21 +107,21 @@ nestbox agent remove
 ### Development Cycle
 ```bash
 # Generate agent project
-nestbox generate project my-agent
+nestbox generate project my-agent --lang ts --template agent --name myAgent
 
 # Develop locally
 cd my-agent
 npm install
 npm run dev
 
-# Deploy to staging
-nestbox agent deploy --env staging
+# Deploy agent
+nestbox agent deploy --agent my-agent --project my-project --log
 
 # Test and validate
 nestbox agent list
 
-# Deploy to production
-nestbox agent deploy --env production
+# Deploy with specific instance
+nestbox agent deploy --agent my-agent --instance production --log
 ```
 
 ### Managing Documents
@@ -114,18 +134,6 @@ nestbox document list
 
 # Delete documents
 nestbox document delete <document-id>
-```
-
-### Managing Images
-```bash
-# Build and push custom images
-nestbox image build
-
-# List available images
-nestbox image list
-
-# Use custom image in agent
-nestbox agent deploy --image <image-id>
 ```
 
 ## Configuration
