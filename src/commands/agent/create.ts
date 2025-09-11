@@ -3,10 +3,9 @@ import chalk from "chalk";
 import fs from "fs/promises";
 import path from "path";
 import yaml from "js-yaml";
-import { getAuthToken } from "../../utils/auth";
-import { Configuration, MachineAgentApi, ProjectsApi } from "@nestbox-ai/admin";
 import { resolveProject } from "../../utils/project";
 import { loadNestboxConfig } from "../../utils/agent";
+import { createApis } from "./apiUtils";
 
 type ManifestAgent = {
 	name: string;
@@ -49,10 +48,13 @@ type AgentCreateData = {
 
 type ConfigData = {
 	machineName?: string;
-	machineInstanceId?: number;
-	instanceIP?: string;
-	machineManifestId?: string;
 	userId?: number;
+};
+
+type MachineInstanceData = {
+	machineId?: string;
+	id?: number;
+	internalIP?: string;
 };
 
 type ManifestFile = { agents: ManifestAgent[] };
@@ -85,24 +87,25 @@ function buildAgentData(
 	agentName: string,
 	options: CreateAgentOptions = {},
 	manifestAgent?: ManifestAgent,
-	configData: ConfigData = {}
+	configData: ConfigData = {},
+	machineInstanceData: MachineInstanceData = {}
 ): AgentCreateData {
 	const merged = {
 		type: options.type ?? manifestAgent?.type,
-		agentName: (options.prefix + "-" || "") + agentName,
+		agentName: options.prefix
+			? options.prefix + "-" + agentName
+			: agentName,
 		goal: options.goal ?? manifestAgent?.goal,
 		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
-		machineManifestId:
-			options.machineManifestId ?? configData.machineManifestId,
+		machineManifestId: machineInstanceData.machineId,
 		projectId: options.projectId,
 		machineName: options.machineName ?? configData.machineName,
-		machineInstanceId:
-			options.machineInstanceId ?? configData.machineInstanceId,
-		instanceIP: options.instanceIP ?? configData.instanceIP,
+		machineInstanceId: machineInstanceData.id,
+		instanceIP: machineInstanceData.internalIP,
 		userId: options.userId ?? configData.userId,
 		entryFunctionName:
 			options.entryFunctionName ?? manifestAgent?.entry ?? "",
-		modelBaseId: options.modelBaseId ?? "",
+		modelBaseId: "",
 		parameters: [{}] as [{}],
 	};
 
@@ -146,67 +149,75 @@ export function registerCreateCommand(agentCommand: Command) {
 			"--projectId <projectId>",
 			"Project ID (defaults to current project)"
 		)
-		.option("--instanceName <instanceName>", "Name of the project instance")
-		.option(
-			"--machineManifestId <machineManifestId>",
-			"Machine manifest ID"
-		)
 		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
 		.option(
 			"--prefix <prefix>",
 			"A prefix added to beginning of the agent name."
 		)
 		.option("--goal <goal>", "Goal/description of the agent")
-		.option("--modelBaseId <modelBaseId>", "Model base ID")
 		.option("--machineName <machineName>", "Machine name")
-		.option(
-			"--machineInstanceId <machineInstanceId>",
-			"Machine instance ID",
-			v => parseInt(v, 10)
-		)
-		.option("--instanceIP <instanceIP>", "Instance IP address")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
 		.action(async (agentName, options): Promise<any> => {
-			const authToken = getAuthToken();
-			if (!authToken) {
-				throw new Error(
-					"No authentication token found. Please login first."
-				);
-			}
-
-			const configuration = new Configuration({
-				basePath: authToken.serverUrl,
-				baseOptions: { headers: { Authorization: authToken.token } },
-			});
-
-			const projectsApi = new ProjectsApi(configuration);
-			const agentsApi = new MachineAgentApi(configuration);
-
-			// resolve project (your .option uses --project, not --projectId)
-			const projectData = await resolveProject(projectsApi, {
-				project: options.projectId,
-				instance: options.instanceName || "",
-				...options,
-			});
-
-			// read YAML (if present) for this agent
-			const manifestAgent = await loadAgentFromManifest(agentName);
-			const projectRoot = process.cwd();
-			const configData = loadNestboxConfig(projectRoot);
-
-			// build & validate merged payload
-			const data = buildAgentData(
-				agentName,
-				{ ...options, projectId: projectData.id },
-				manifestAgent,
-				configData
-			);
-
-			// call API
 			try {
+				const apis = createApis();
+
+				// resolve project (your .option uses --project, not --projectId)
+				const projectData = await resolveProject(apis.projectsApi, {
+					project: options.projectId,
+					instance: options.machineName || "",
+					...options,
+				});
+
+				// read YAML (if present) for this agent
+				const manifestAgent = await loadAgentFromManifest(agentName);
+				const projectRoot = process.cwd();
+				const configData = loadNestboxConfig(projectRoot);
+
+				const machineName =
+					options.machineName || configData.machineName;
+
+				const instanceData: any =
+					await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
+						projectData.id,
+						0,
+						10
+					);
+
+				const targetInstance = instanceData.data.machineInstances.find(
+					(instance: any) => instance.instanceName === machineName
+				);
+
+				if (!targetInstance) {
+					console.error(
+						chalk.red(
+							`Instance with name "${machineName}" not found in project "${projectData.name}".`
+						)
+					);
+					console.log(chalk.yellow("Available instances:"));
+					instanceData.data.machineInstances.forEach(
+						(instance: any) => {
+							console.log(
+								chalk.yellow(
+									`  - ${instance.instanceName} (ID: ${instance.id})`
+								)
+							);
+						}
+					);
+					return;
+				}
+
+				// build & validate merged payload
+				const data = buildAgentData(
+					agentName,
+					{ ...options, projectId: projectData.id },
+					manifestAgent,
+					configData,
+					targetInstance
+				);
+
 				const response =
-					await agentsApi.machineAgentControllerCreateMachineAgent(
+					await apis.agentsApi.machineAgentControllerCreateMachineAgent(
 						projectData.id,
 						{ ...data }
 					);

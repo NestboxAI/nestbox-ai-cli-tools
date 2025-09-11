@@ -1,272 +1,572 @@
 import { Command } from "commander";
-import { withTokenRefresh } from "../../utils/error";
 import chalk from "chalk";
+import fs from "fs";
+import path from "path";
+import yaml from "js-yaml";
+import { getAuthToken } from "../../utils/auth";
+import { withTokenRefresh } from "../../utils/error";
 import ora from "ora";
 import { resolveProject } from "../../utils/project";
-import fs from "fs";
 import {
-  createZipFromDirectory,
-  findProjectRoot,
-  isTypeScriptProject,
-  loadNestboxConfig,
-  runPredeployScripts,
+	createZipFromDirectory,
+	isTypeScriptProject,
+	loadNestboxConfig,
+	runPredeployScripts,
 } from "../../utils/agent";
 import axios from "axios";
-import { AgentType } from "../../types/agentType";
-import path from "path";
-import { getAuthToken } from "../../utils/auth";
 import { createApis } from "./apiUtils";
+import inquirer from "inquirer";
 
-export function registerDeployCommand(agentCommand: Command): void {
-  agentCommand
-    .command("deploy")
-    .description("Deploy an AI agent to the Nestbox platform")
-    .option("--agent <agentName>", "Agent name to deploy")
-    .option("--chatbot <chatbotName>", "Chatbot name to deploy")
-    .requiredOption("--instance <instanceName>", "Instance name")
-    .option(
-      "--zip <zipFileOrDirPath>",
-      "Path to the zip file or directory to upload"
-    )
-    .option(
-      "--project <projectName>",
-      "Project name (defaults to the current project)"
-    )
-    .option("--entry <entryFunction>", "Entry function name")
-    .option("--log", "Show detailed logs during deployment")
-    .action(async (options) => {
-      try {
-        const {
-          agent: agentName,
-          chatbot: chatbotName,
-          instance: instanceName,
-          zip: customZipPath,
-          entry,
-          log,
-        } = options;
-        
-        // Ensure either agent or chatbot is provided, but not both
-        if ((!agentName && !chatbotName) || (agentName && chatbotName)) {
-          console.error(
-            chalk.red("Please provide either --agent OR --chatbot option, but not both.")
-          );
-          return;
-        }
+type ManifestAgent = {
+	name: string;
+	goal: string;
+	entry: string;
+	inputSchema: any;
+	type: string;
+};
 
-        let apis = createApis();
+type CreateAgentOptions = {
+	type?: string;
+	goal?: string;
+	inputSchema?: any;
+	machineManifestId?: string;
+	projectId?: string;
+	machineName?: string;
+	machineInstanceId?: number;
+	instanceIP?: string;
+	userId?: number;
+	entryFunctionName?: string;
+	modelBaseId?: string;
+	prefix?: string;
+};
 
-        // Find project root
-        const projectRoot = await findProjectRoot();
-        console.log(chalk.blue(`Project root detected at: ${projectRoot}`));
+type AgentCreateData = {
+	type: string;
+	agentName: string;
+	goal: string;
+	inputSchema: any;
+	machineManifestId: string;
+	projectId: string;
+	machineName: string;
+	machineInstanceId: number;
+	instanceIP: string;
+	userId: number;
+	entryFunctionName: string;
+	modelBaseId: string;
+	parameters: [{}];
+};
 
-        // Main deployment logic with token refresh
-        await withTokenRefresh(
-          async () => {
-            // Resolve project
-            const projectData = await resolveProject(apis.projectsApi, options);
+type ConfigData = {
+	machineName?: string;
+	userId?: number;
+};
 
-            // Determine if we're deploying an agent or chatbot
-            const isAgent = !!agentName;
-            const resourceName = isAgent ? agentName : chatbotName;
-            const resourceType = isAgent ? "Agent" : "Chatbot";
-            const agentType = isAgent ? AgentType.REGULAR : "CHAT";
-            
-            // Get agents data and find agent/chatbot by name
-            const agentsData: any = await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
-              projectData.id, 
-              0, 
-              10, 
-              agentType
-            );
+type MachineInstanceData = {
+	machineId?: string;
+	id?: number;
+	internalIP?: string;
+};
 
-            const targetAgent = agentsData.data.machineAgents.find(
-              (agent: any) => agent.agentName === resourceName
-            );
+type ManifestFile = { agents: ManifestAgent[] };
 
-            if (!targetAgent) {
-              console.error(
-                chalk.red(`${resourceType} with name "${resourceName}" not found in project "${projectData.name}".`)
-              );
-              console.log(chalk.yellow(`Available ${resourceType.toLowerCase()}s:`));
-              agentsData.data.machineAgents.forEach((agent: any) => {
-                console.log(chalk.yellow(`  - ${agent.agentName} (ID: ${agent.id})`));
-              });
-              return;
-            }
+async function loadAgentFromManifest(
+	agentName: string
+): Promise<ManifestAgent | undefined> {
+	const file = path.join(process.cwd(), "nestbox-agents.yaml");
 
-            // Get instance data and find instance by name
-            const instanceData: any = await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
-              projectData.id, 
-              0, 
-              10
-            );
+	try {
+		await fs.accessSync(file);
+	} catch (err: any) {
+		if (err?.code === "ENOENT") return undefined;
+		throw new Error(`cannot access nestbox-agents.yaml: ${err.message}`);
+	}
 
-            const targetInstance = instanceData.data.machineInstances.find(
-              (instance: any) => instance.instanceName === instanceName
-            );
+	const raw = await fs.readFileSync(file, "utf8");
+	const doc = yaml.load(raw) as ManifestFile | undefined;
 
-            if (!targetInstance) {
-              console.error(
-                chalk.red(`Instance with name "${instanceName}" not found in project "${projectData.name}".`)
-              );
-              console.log(chalk.yellow("Available instances:"));
-              instanceData.data.machineInstances.forEach((instance: any) => {
-                console.log(chalk.yellow(`  - ${instance.instanceName} (ID: ${instance.id})`));
-              });
-              return;
-            }
+	if (!doc || !Array.isArray((doc as any)?.agents)) {
+		throw new Error(
+			`invalid nestbox-agets.yaml: root must contain an "agents" array`
+		);
+	}
 
-            // Extract IDs
-            const agentId = targetAgent.id;
-            const resolvedEntry = entry || targetAgent.entryFunctionName || "main";
-            const instanceId = targetInstance.id;
+	return doc.agents.find(a => a?.name === agentName);
+}
 
-            // Load nestbox.config.json
-            const config = loadNestboxConfig(projectRoot);
+function buildAgentData(
+	agentName: string,
+	options: CreateAgentOptions = {},
+	manifestAgent?: ManifestAgent,
+	configData: ConfigData = {},
+	machineInstanceData: MachineInstanceData = {}
+): AgentCreateData {
+	const merged = {
+		type: options.type ?? manifestAgent?.type,
+		agentName: options.prefix
+			? options.prefix + "-" + agentName
+			: agentName,
+		goal: options.goal ?? manifestAgent?.goal,
+		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
+		machineManifestId: machineInstanceData.machineId,
+		projectId: options.projectId,
+		machineName: options.machineName ?? configData.machineName,
+		machineInstanceId: machineInstanceData.id,
+		instanceIP: machineInstanceData.internalIP,
+		userId: options.userId ?? configData.userId,
+		entryFunctionName:
+			options.entryFunctionName ?? manifestAgent?.entry ?? "",
+		modelBaseId: "",
+		parameters: [{}] as [{}],
+	};
+	const required: (keyof AgentCreateData)[] = [
+		"type",
+		"agentName",
+		"goal",
+		"inputSchema",
+		"machineManifestId",
+		"projectId",
+		"machineName",
+		"machineInstanceId",
+		"instanceIP",
+		"userId",
+		"entryFunctionName",
+	];
 
-            // Start the deployment process
-            const spinner = ora(
-              `Preparing to deploy ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`
-            ).start();
+	const missing = required.filter(k => {
+		const v = (merged as any)[k];
+		return (
+			v === undefined ||
+			v === null ||
+			(typeof v === "string" && v.trim?.() === "")
+		);
+	});
 
-            try {
-              let zipFilePath;
+	if (missing.length) {
+		throw new Error(
+			`missing required fields: ${missing.join(", ")}. ` +
+				`supply them via flags or add them to the "${agentName}" entry in nestbox-agents.yaml.`
+		);
+	}
 
-              if (customZipPath) {
-                // Process custom zip path
-                if (!fs.existsSync(customZipPath)) {
-                  spinner.fail(`Path not found: ${customZipPath}`);
-                  return;
-                }
+	return merged as AgentCreateData;
+}
 
-                const stats = fs.statSync(customZipPath);
+export function registerDeployCommand(agentCommand: Command) {
+	agentCommand
+		.command("deploy <agentName>")
+		.description("Deploy an AI agent to the Nestbox platform")
+		.option(
+			"--projectId <projectId>",
+			"Project ID (defaults to current project)"
+		)
+		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
+		.option(
+			"--prefix <prefix>",
+			"A prefix added to beginning of the agent name."
+		)
+		.option("--entryFunction <entryFunction>", "Entry function name")
+		.option("--goal <goal>", "Goal/description of the agent")
+		.option("--machineName <machineName>", "Machine name")
+		.option("--inputSchema <inputSchema>", "Agent input schema")
+		.option("--path <path>", "Path to the zip file or directory to upload")
+		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
+		.option("--log", "Show detailed logs during deployment")
+		.option("--silent", "Disable automatic agent creation.")
+		.action(async (agentName, options): Promise<any> => {
+			try {
+				let apis = createApis();
 
-                if (stats.isFile()) {
-                  if (!customZipPath.toLowerCase().endsWith(".zip")) {
-                    spinner.fail(`File is not a zip archive: ${customZipPath}`);
-                    return;
-                  }
-                  spinner.text = `Using provided zip file: ${customZipPath}`;
-                  zipFilePath = customZipPath;
-                } else if (stats.isDirectory()) {
-                  // Process directory
-                  spinner.text = `Processing directory: ${customZipPath}`;
-                  
-                  const isTypeScript = isTypeScriptProject(customZipPath);
+				await withTokenRefresh(
+					async () => {
+						// resolve project
+						const projectData = await resolveProject(
+							apis.projectsApi,
+							{
+								project: options.projectId,
+								instance: "",
+								...options,
+							}
+						);
 
-                  if (isTypeScript && (config?.agent?.predeploy || config?.agents?.predeploy)) {
-                    const predeployScripts = config?.agent?.predeploy || config?.agents?.predeploy;
-                    spinner.text = `Running predeploy scripts on target directory...`;
-                    await runPredeployScripts(predeployScripts, customZipPath);
-                  }
+						const manifestAgent =
+							await loadAgentFromManifest(agentName);
+						const projectRoot = process.cwd();
+						const config = loadNestboxConfig(projectRoot);
 
-                  spinner.text = `Creating zip archive from directory ${customZipPath}...`;
-                  zipFilePath = createZipFromDirectory(customZipPath);
-                  spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-                }
-              } else {
-                // Use project root
-                spinner.text = `Using project root: ${projectRoot}`;
-                
-                const isTypeScript = isTypeScriptProject(projectRoot);
+						if (!options.machineName && !config.machineName) {
+							console.log(
+								chalk.red(
+									"Parameter <machineName> not provided."
+								)
+							);
+							return;
+						}
 
-                if (isTypeScript && (config?.agent?.predeploy || config?.agents?.predeploy)) {
-                  const predeployScripts = config?.agent?.predeploy || config?.agents?.predeploy;
-                  spinner.text = `Running predeploy scripts on project root...`;
-                  await runPredeployScripts(predeployScripts, projectRoot);
-                }
+						const machineName =
+							options.machineName || config.machineName;
 
-                spinner.text = `Creating zip archive from project root ${projectRoot}...`;
-                zipFilePath = createZipFromDirectory(projectRoot);
-                spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-              }
+						const instanceData: any =
+							await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
+								projectData.id,
+								0,
+								10
+							);
 
-              spinner.text = `Deploying ${resourceType.toLowerCase()} ${agentId} to instance ${instanceId}...`;
+						const targetInstance =
+							instanceData.data.machineInstances.find(
+								(instance: any) =>
+									instance.instanceName === machineName
+							);
 
-              // Prepare deployment
-              const authToken = getAuthToken();
-              const baseUrl = authToken?.serverUrl?.endsWith("/")
-                ? authToken.serverUrl.slice(0, -1)
-                : authToken?.serverUrl;
+						if (!targetInstance) {
+							console.error(
+								chalk.red(
+									`Instance with name "${machineName}" not found in project "${projectData.name}".`
+								)
+							);
+							console.log(chalk.yellow("Available instances:"));
+							instanceData.data.machineInstances.forEach(
+								(instance: any) => {
+									console.log(
+										chalk.yellow(
+											`  - ${instance.instanceName} (ID: ${instance.id})`
+										)
+									);
+								}
+							);
+							return;
+						}
 
-              const { default: FormData } = await import("form-data");
-              const form = new FormData();
+						// build and validate merged payload
+						const data = buildAgentData(
+							agentName,
+							{ ...options, projectId: projectData.id },
+							manifestAgent,
+							config,
+							targetInstance
+						);
 
-              form.append("file", fs.createReadStream(zipFilePath));
-              form.append("machineAgentId", agentId.toString());
-              form.append("instanceId", instanceId.toString());
-              form.append("entryFunctionName", resolvedEntry);
-              form.append("isSourceCodeUpdate", "true");
-              form.append("projectId", projectData.id);
+						const agentsData: any =
+							await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
+								projectData.id,
+								0,
+								10,
+								data.type
+							);
 
-              if (log) {
-                console.log(chalk.blue("Form Details "));
-                console.log(chalk.blue(`  - File: ${path.basename(zipFilePath)}`));
-                console.log(chalk.blue(`  - Agent ID: ${agentId}`));
-                console.log(chalk.blue(`  - Instance ID: ${instanceId}`));
-                console.log(chalk.blue(`  - Entry Function: ${resolvedEntry}`));
-                console.log(chalk.blue(`  - Project ID: ${projectData.id}`));
-              }
+						let targetAgent = agentsData.data.machineAgents.find(
+							(agent: any) => agent.agentName === data.agentName
+						);
 
-              const axiosInstance = axios.create({
-                baseURL: baseUrl,
-                headers: {
-                  ...form.getHeaders(),
-                  Authorization: authToken?.token,
-                },
-              });
+						if (!targetAgent && options.silent) {
+							console.log(
+								chalk.yellow(
+									"No agent with specified name found. Please create one first."
+								)
+							);
+							return;
+						}
 
-              const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
+						if (!targetAgent) {
+							const { confirmCreation } = await inquirer.prompt([
+								{
+									type: "confirm",
+									name: "confirmCreation",
+									message: chalk.red(
+										"No such agent exists. Would you like to create one first before deployment?"
+									),
+									default: false,
+								},
+							]);
 
-              spinner.text = `Deploy ${resourceType.toLowerCase()} ${agentName}...`;
-              const res = await axiosInstance.patch(endpoint, form);
-              
-              if (!customZipPath && zipFilePath && fs.existsSync(zipFilePath)) {
-                fs.unlinkSync(zipFilePath);
-              }
+							if (!confirmCreation) {
+								return;
+							}
 
-              if (log) {
-                console.log(chalk.blue("\nDeployment request:"));
-                console.log(chalk.blue(`  URL: ${baseUrl}${endpoint}`));
-                console.log(chalk.blue(`  Method: PATCH`));
-                console.log(chalk.blue(`  File: ${path.basename(zipFilePath)}`));  
-                console.log(chalk.blue(`  Response status: ${res.status} ${res.statusText}`));
-                const lines = res.data.logEntries || [];
-                console.log(chalk.blue(`  Deployment log entries (${lines.length} lines):`));
-                lines.forEach((line:  any) => {
-                  console.log(chalk.blue(`    - [${line.type} ${line.timestamp}] ${line.message} `));
-                });
-              }
-              spinner.succeed("Successfully deployed");
-              console.log(chalk.green(`${resourceType} deployed successfully!`));
-              console.log(chalk.cyan(`📍 Instance: ${instanceName}`));
-              console.log(chalk.cyan(`🤖 Agent: ${agentName} (${agentId})`));
-              console.log(chalk.cyan(`⚙️ Entry: ${resolvedEntry}`));
-              console.log(chalk.cyan(`🔄 Process: ${res.data.processName}`));
-            } catch (error: any) {
-              spinner.fail(`Failed to deploy ${resourceType.toLowerCase()}`);
-              throw error;
-            }
-          },
-          () => {
-            apis = createApis();
-          }
-        );
-      } catch (error: any) {
-        if (error.message && error.message.includes('Authentication')) {
-          console.error(chalk.red(error.message));
-        } else if (error.response) {
-          console.error(
-            chalk.red(
-              `API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
-            )
-          );
-          if (error.response.data) {
-            console.error(chalk.red(`Error Data: ${JSON.stringify(error.response.data, null, 2)}`));
-          }
-        } else {
-          console.error(chalk.red("Error:"), error.message || "Unknown error");
-        }
-      }
-    });
+							const response =
+								await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+									projectData.id,
+									{ ...data }
+								);
+
+							targetAgent = response.data;
+
+							console.log(
+								chalk.green("Created agent before deploying.")
+							);
+						}
+
+						// Extract IDs
+						const agentId = targetAgent.id;
+						const resolvedEntry =
+							data.entryFunctionName ||
+							targetAgent.entryFunctionName ||
+							"main";
+						const instanceId = targetInstance.id;
+
+						// Start the deployment process
+						const spinner = ora(
+							`Preparing to deploy ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`
+						).start();
+
+						try {
+							let zipFilePath;
+							let customZipPath = options.path;
+
+							if (customZipPath) {
+								// Process custom zip path
+								if (!fs.existsSync(customZipPath)) {
+									spinner.fail(
+										`Path not found: ${customZipPath}`
+									);
+									return;
+								}
+
+								const stats = fs.statSync(customZipPath);
+
+								if (stats.isFile()) {
+									if (
+										!customZipPath
+											.toLowerCase()
+											.endsWith(".zip")
+									) {
+										spinner.fail(
+											`File is not a zip archive: ${customZipPath}`
+										);
+										return;
+									}
+									spinner.text = `Using provided zip file: ${customZipPath}`;
+									zipFilePath = customZipPath;
+								} else if (stats.isDirectory()) {
+									// Process directory
+									spinner.text = `Processing directory: ${customZipPath}`;
+
+									const isTypeScript =
+										isTypeScriptProject(customZipPath);
+
+									if (
+										isTypeScript &&
+										(config?.agent?.predeploy ||
+											config?.agents?.predeploy)
+									) {
+										const predeployScripts =
+											config?.agent?.predeploy ||
+											config?.agents?.predeploy;
+										spinner.text = `Running predeploy scripts on target directory...`;
+										await runPredeployScripts(
+											predeployScripts,
+											customZipPath
+										);
+									}
+
+									spinner.text = `Creating zip archive from directory ${customZipPath}...`;
+									zipFilePath =
+										createZipFromDirectory(customZipPath);
+									spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+								}
+							} else {
+								// Use project root
+								spinner.text = `Using project root: ${projectRoot}`;
+
+								const isTypeScript =
+									isTypeScriptProject(projectRoot);
+
+								if (
+									isTypeScript &&
+									(config?.agent?.predeploy ||
+										config?.agents?.predeploy)
+								) {
+									const predeployScripts =
+										config?.agent?.predeploy ||
+										config?.agents?.predeploy;
+									spinner.text = `Running predeploy scripts on project root...`;
+									await runPredeployScripts(
+										predeployScripts,
+										projectRoot
+									);
+								}
+
+								spinner.text = `Creating zip archive from project root ${projectRoot}...`;
+								zipFilePath =
+									createZipFromDirectory(projectRoot);
+								spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+							}
+
+							spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
+
+							// Prepare deployment
+							const authToken = getAuthToken();
+							const baseUrl = authToken?.serverUrl?.endsWith("/")
+								? authToken.serverUrl.slice(0, -1)
+								: authToken?.serverUrl;
+
+							const { default: FormData } = await import(
+								"form-data"
+							);
+							const form = new FormData();
+
+							form.append(
+								"file",
+								fs.createReadStream(zipFilePath)
+							);
+							form.append("machineAgentId", agentId.toString());
+							form.append("instanceId", instanceId.toString());
+							form.append("entryFunctionName", resolvedEntry);
+							form.append("isSourceCodeUpdate", "true");
+							form.append("projectId", projectData.id);
+
+							if (options.log) {
+								console.log(chalk.blue("Form Details "));
+								console.log(
+									chalk.blue(
+										`  - File: ${path.basename(zipFilePath)}`
+									)
+								);
+								console.log(
+									chalk.blue(`  - Agent ID: ${agentId}`)
+								);
+								console.log(
+									chalk.blue(`  - Instance ID: ${instanceId}`)
+								);
+								console.log(
+									chalk.blue(
+										`  - Entry Function: ${resolvedEntry}`
+									)
+								);
+								console.log(
+									chalk.blue(
+										`  - Project ID: ${projectData.id}`
+									)
+								);
+							}
+
+							const axiosInstance = axios.create({
+								baseURL: baseUrl,
+								headers: {
+									...form.getHeaders(),
+									Authorization: authToken?.token,
+								},
+							});
+
+							const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
+
+							spinner.text = `Deploy ${agentName}...`;
+							const res = await axiosInstance.patch(
+								endpoint,
+								form
+							);
+
+							await axios.patch(
+								baseUrl + endpoint,
+								{
+									projectId: data.projectId,
+									id: agentId,
+									agentName: data.agentName,
+									goal: data.goal,
+									inputSchema: data.inputSchema,
+								},
+								{
+									headers: {
+										Authorization: authToken?.token,
+									},
+								}
+							);
+
+							if (
+								!customZipPath &&
+								zipFilePath &&
+								fs.existsSync(zipFilePath)
+							) {
+								fs.unlinkSync(zipFilePath);
+							}
+
+							if (options.log) {
+								console.log(
+									chalk.blue("\nDeployment request:")
+								);
+								console.log(
+									chalk.blue(`  URL: ${baseUrl}${endpoint}`)
+								);
+								console.log(chalk.blue(`  Method: PATCH`));
+								console.log(
+									chalk.blue(
+										`  File: ${path.basename(zipFilePath)}`
+									)
+								);
+								console.log(
+									chalk.blue(
+										`  Response status: ${res.status} ${res.statusText}`
+									)
+								);
+								const lines = res.data.logEntries || [];
+								console.log(
+									chalk.blue(
+										`  Deployment log entries (${lines.length} lines):`
+									)
+								);
+								lines.forEach((line: any) => {
+									console.log(
+										chalk.blue(
+											`    - [${line.type} ${line.timestamp}] ${line.message} `
+										)
+									);
+								});
+							}
+							spinner.succeed("Successfully deployed");
+							console.log(
+								chalk.green(
+									`${data.agentName} deployed successfully!`
+								)
+							);
+							console.log(
+								chalk.cyan(`📍 Instance: ${data.machineName}`)
+							);
+							console.log(
+								chalk.cyan(
+									`🤖 Agent: ${agentName} (${agentId})`
+								)
+							);
+							console.log(
+								chalk.cyan(`⚙️ Entry: ${resolvedEntry}`)
+							);
+							console.log(
+								chalk.cyan(
+									`🔄 Process: ${res.data.processName}`
+								)
+							);
+						} catch (error: any) {
+							spinner.fail(
+								`Failed to deploy ${data.agentName.toLowerCase()}`
+							);
+							throw error;
+						}
+					},
+					() => {
+						apis = createApis();
+					}
+				);
+			} catch (error: any) {
+				if (error.message && error.message.includes("Authentication")) {
+					console.error(chalk.red(error.message));
+				} else if (error.response) {
+					console.error(
+						chalk.red(
+							`API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
+						)
+					);
+					if (error.response.data) {
+						console.error(
+							chalk.red(
+								`Error Data: ${JSON.stringify(error.response.data, null, 2)}`
+							)
+						);
+					}
+				} else {
+					console.error(
+						chalk.red("Error:"),
+						error.message || "Unknown error"
+					);
+				}
+			}
+		});
 }
