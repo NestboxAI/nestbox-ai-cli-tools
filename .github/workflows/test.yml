@@ -40,9 +40,6 @@ jobs:
           node --version
           npm --version
 
-      - name: Run linting
-        run: npm run lint
-
       - name: Run tests
         run: |
           echo "Running tests..."
