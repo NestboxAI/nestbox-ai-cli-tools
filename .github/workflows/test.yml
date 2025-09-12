@@ -1,0 +1,54 @@
+name: Test Nestbox AI CLI Tools
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install --prefer-offline --no-audit
+          
+      - name: Install platform-specific dependencies
+        run: |
+          # Install Linux-specific Rollup binary for vitest
+          npm install @rollup/rollup-linux-x64-gnu --no-save || echo "Warning: Could not install platform-specific Rollup binary"
+        continue-on-error: true
+          
+      - name: Verify installation
+        run: |
+          npm list vitest --depth=0
+          node --version
+          npm --version
+
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          echo "Node.js version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Checking if vitest is available..."
+          npx vitest --version || echo "Vitest not found via npx"
+          npm run test:ci
+          echo "All tests passed! ✅"
+
+      - name: Build project
+        run: npm run build
