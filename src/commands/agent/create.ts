@@ -20,8 +20,8 @@ type CreateAgentOptions = {
 	goal?: string;
 	inputSchema?: any;
 	machineManifestId?: string;
-	projectId?: string;
-	machineName?: string;
+	project?: string;
+	instance?: string;
 	machineInstanceId?: number;
 	instanceIP?: string;
 	userId?: number;
@@ -47,7 +47,7 @@ type AgentCreateData = {
 };
 
 type ConfigData = {
-	machineName?: string;
+	instance?: string;
 	userId?: number;
 };
 
@@ -98,8 +98,8 @@ function buildAgentData(
 		goal: options.goal ?? manifestAgent?.goal,
 		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
 		machineManifestId: machineInstanceData.machineId,
-		projectId: options.projectId,
-		machineName: options.machineName ?? configData.machineName,
+		projectId: options.project,
+		machineName: options.instance ?? configData.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
 		userId: options.userId ?? configData.userId,
@@ -142,10 +142,11 @@ function buildAgentData(
 
 export function registerCreateCommand(agentCommand: Command) {
 	agentCommand
-		.command("create <agentName>")
+		.command("create")
 		.description("Create an agent with direct arguments or YAML.")
+		.option("--agent <agent>", "Agent name to deploy")
 		.option(
-			"--projectId <projectId>",
+			"--project <project>",
 			"Project ID (defaults to current project)"
 		)
 		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
@@ -154,27 +155,47 @@ export function registerCreateCommand(agentCommand: Command) {
 			"A prefix added to beginning of the agent name."
 		)
 		.option("--goal <goal>", "Goal/description of the agent")
-		.option("--machineName <machineName>", "Machine name")
+		.option("--instance <instance>", "Machine name")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
-		.action(async (agentName, options): Promise<any> => {
+		.action(async (options): Promise<any> => {
 			try {
 				const apis = createApis();
 
-				// resolve project (your .option uses --project, not --projectId)
+				if (!options?.agent) {
+					console.log(chalk.red("Parameter <agent> not provided."));
+					return;
+				}
+
+				// resolve project
 				const projectData = await resolveProject(apis.projectsApi, {
-					project: options.projectId,
-					instance: options.machineName || "",
+					project: options.project,
+					instance: options?.instance || "",
 					...options,
 				});
 
 				// read YAML (if present) for this agent
-				const manifestAgent = await loadAgentFromManifest(agentName);
+				const manifestAgent = await loadAgentFromManifest(
+					options.agent
+				);
+
+				if (!manifestAgent) {
+					console.log(
+						chalk.yellow("No manifest agent found with this name.")
+					);
+				}
+
 				const projectRoot = process.cwd();
 				const configData = loadNestboxConfig(projectRoot);
 
-				const machineName =
-					options.machineName || configData.machineName;
+				if (!options?.instance && !configData?.instance) {
+					console.log(
+						chalk.red("Parameter <instance> not provided.")
+					);
+					return;
+				}
+
+				const machineName = options.instance || configData.instance;
 
 				const instanceData: any =
 					await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
@@ -208,8 +229,8 @@ export function registerCreateCommand(agentCommand: Command) {
 
 				// build & validate merged payload
 				const data = buildAgentData(
-					agentName,
-					{ ...options, projectId: projectData.id },
+					options.agent,
+					{ ...options, project: projectData.id },
 					manifestAgent,
 					configData,
 					targetInstance
@@ -225,15 +246,19 @@ export function registerCreateCommand(agentCommand: Command) {
 				return response.data;
 			} catch (error: any) {
 				if (error.response && error.response.status === 401) {
-					throw new Error(
-						'Authentication token has expired. Please login again using "nestbox login <domain>".'
+					console.log(
+						chalk.red(
+							'Authentication token has expired. Please login again using "nestbox login <domain>".'
+						)
 					);
 				} else if (error.response) {
-					throw new Error(
-						`API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
+					console.log(
+						chalk.red(
+							`API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
+						)
 					);
 				} else {
-					throw new Error(error.message || "Unknown error");
+					console.log(chalk.red(error.message || "Unknown error"));
 				}
 			}
 		});

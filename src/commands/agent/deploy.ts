@@ -30,8 +30,8 @@ type CreateAgentOptions = {
 	goal?: string;
 	inputSchema?: any;
 	machineManifestId?: string;
-	projectId?: string;
-	machineName?: string;
+	project?: string;
+	instance?: string;
 	machineInstanceId?: number;
 	instanceIP?: string;
 	userId?: number;
@@ -57,7 +57,7 @@ type AgentCreateData = {
 };
 
 type ConfigData = {
-	machineName?: string;
+	instance?: string;
 	userId?: number;
 };
 
@@ -108,8 +108,8 @@ function buildAgentData(
 		goal: options.goal ?? manifestAgent?.goal,
 		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
 		machineManifestId: machineInstanceData.machineId,
-		projectId: options.projectId,
-		machineName: options.machineName ?? configData.machineName,
+		projectId: options.project,
+		machineName: options.instance ?? configData.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
 		userId: options.userId ?? configData.userId,
@@ -152,10 +152,11 @@ function buildAgentData(
 
 export function registerDeployCommand(agentCommand: Command) {
 	agentCommand
-		.command("deploy <agentName>")
+		.command("deploy")
 		.description("Deploy an AI agent to the Nestbox platform")
+		.option("--agent <agent>", "Agent name to deploy")
 		.option(
-			"--projectId <projectId>",
+			"--project <project>",
 			"Project ID (defaults to current project)"
 		)
 		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
@@ -165,44 +166,56 @@ export function registerDeployCommand(agentCommand: Command) {
 		)
 		.option("--entryFunction <entryFunction>", "Entry function name")
 		.option("--goal <goal>", "Goal/description of the agent")
-		.option("--machineName <machineName>", "Machine name")
+		.option("--instance <instance>", "Machine name")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.option("--path <path>", "Path to the zip file or directory to upload")
 		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
 		.option("--log", "Show detailed logs during deployment")
 		.option("--silent", "Disable automatic agent creation.")
-		.action(async (agentName, options): Promise<any> => {
+		.action(async (options): Promise<any> => {
 			try {
 				let apis = createApis();
 
 				await withTokenRefresh(
 					async () => {
+						if (!options?.agent) {
+							console.log(
+								chalk.red("Parameter <agent> not provided.")
+							);
+							return;
+						}
 						// resolve project
 						const projectData = await resolveProject(
 							apis.projectsApi,
 							{
-								project: options.projectId,
+								project: options.project,
 								instance: "",
 								...options,
 							}
 						);
 
-						const manifestAgent =
-							await loadAgentFromManifest(agentName);
+						const manifestAgent = await loadAgentFromManifest(
+							options.agent
+						);
+
+						if (!manifestAgent) {
+							console.log(
+								chalk.yellow(
+									"No manifest agent found with this name."
+								)
+							);
+						}
 						const projectRoot = process.cwd();
 						const config = loadNestboxConfig(projectRoot);
 
-						if (!options.machineName && !config.machineName) {
+						if (!options?.instance && !config?.instance) {
 							console.log(
-								chalk.red(
-									"Parameter <machineName> not provided."
-								)
+								chalk.red("Parameter <instance> not provided.")
 							);
 							return;
 						}
 
-						const machineName =
-							options.machineName || config.machineName;
+						const machineName = options.instance || config.instance;
 
 						const instanceData: any =
 							await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
@@ -238,8 +251,8 @@ export function registerDeployCommand(agentCommand: Command) {
 
 						// build and validate merged payload
 						const data = buildAgentData(
-							agentName,
-							{ ...options, projectId: projectData.id },
+							options.agent,
+							{ ...options, project: projectData.id },
 							manifestAgent,
 							config,
 							targetInstance
@@ -449,7 +462,7 @@ export function registerDeployCommand(agentCommand: Command) {
 
 							const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
 
-							spinner.text = `Deploy ${agentName}...`;
+							spinner.text = `Deploy ${options.agent}...`;
 							const res = await axiosInstance.patch(
 								endpoint,
 								form
@@ -522,7 +535,7 @@ export function registerDeployCommand(agentCommand: Command) {
 							);
 							console.log(
 								chalk.cyan(
-									`🤖 Agent: ${agentName} (${agentId})`
+									`🤖 Agent: ${options.agent} (${agentId})`
 								)
 							);
 							console.log(
