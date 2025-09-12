@@ -116,7 +116,6 @@ function buildAgentData(
 		entryFunctionName:
 			options.entryFunctionName ?? manifestAgent?.entry ?? "",
 		modelBaseId: "",
-		parameters: [{}] as [{}],
 	};
 	const required: (keyof AgentCreateData)[] = [
 		"type",

@@ -48,7 +48,7 @@
     "vitest": "^1.1.0"
   },
   "dependencies": {
-    "@nestbox-ai/admin": "1.0.42",
+    "@nestbox-ai/admin": "1.0.50",
     "@types/js-yaml": "^4.0.9",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
