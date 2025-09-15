@@ -34,7 +34,6 @@ type CreateAgentOptions = {
 	instance?: string;
 	machineInstanceId?: number;
 	instanceIP?: string;
-	userId?: number;
 	entryFunctionName?: string;
 	modelBaseId?: string;
 	prefix?: string;
@@ -58,7 +57,6 @@ type AgentCreateData = {
 
 type ConfigData = {
 	instance?: string;
-	userId?: number;
 };
 
 type MachineInstanceData = {
@@ -112,9 +110,9 @@ function buildAgentData(
 		machineName: options.instance ?? configData.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
-		userId: options.userId ?? configData.userId,
 		entryFunctionName:
 			options.entryFunctionName ?? manifestAgent?.entry ?? "",
+		userId: 0,
 		modelBaseId: "",
 	};
 	const required: (keyof AgentCreateData)[] = [
@@ -169,7 +167,6 @@ export function registerDeployCommand(agentCommand: Command) {
 		.option("--instance <instance>", "Machine name")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.option("--path <path>", "Path to the zip file or directory to upload")
-		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
 		.option("--log", "Show detailed logs during deployment")
 		.option("--silent", "Disable automatic agent creation.")
 		.action(async (options): Promise<any> => {

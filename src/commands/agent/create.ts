@@ -24,7 +24,6 @@ type CreateAgentOptions = {
 	instance?: string;
 	machineInstanceId?: number;
 	instanceIP?: string;
-	userId?: number;
 	entryFunctionName?: string;
 	modelBaseId?: string;
 	prefix?: string;
@@ -48,7 +47,6 @@ type AgentCreateData = {
 
 type ConfigData = {
 	instance?: string;
-	userId?: number;
 };
 
 type MachineInstanceData = {
@@ -102,9 +100,9 @@ function buildAgentData(
 		machineName: options.instance ?? configData.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
-		userId: options.userId ?? configData.userId,
 		entryFunctionName:
 			options.entryFunctionName ?? manifestAgent?.entry ?? "",
+		userId: 0,
 		modelBaseId: "",
 	};
 
@@ -157,7 +155,6 @@ export function registerCreateCommand(agentCommand: Command) {
 		.option("--goal <goal>", "Goal/description of the agent")
 		.option("--instance <instance>", "Machine name")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
-		.option("--userId <userId>", "User ID", v => parseInt(v, 10))
 		.action(async (options): Promise<any> => {
 			try {
 				const apis = createApis();
