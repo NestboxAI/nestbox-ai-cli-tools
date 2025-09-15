@@ -267,22 +267,13 @@ export function registerDeployCommand(agentCommand: Command) {
 							(agent: any) => agent.agentName === data.agentName
 						);
 
-						if (!targetAgent && options.silent) {
-							console.log(
-								chalk.yellow(
-									"No agent with specified name found. Please create one first."
-								)
-							);
-							return;
-						}
-
-						if (!targetAgent) {
+						if (!targetAgent && !options.silent) {
 							const { confirmCreation } = await inquirer.prompt([
 								{
 									type: "confirm",
 									name: "confirmCreation",
 									message: chalk.red(
-										"No such agent exists. Would you like to create one first before deployment?"
+										"No agent with specified name found. Would you like to create one first before deployment?"
 									),
 									default: false,
 								},
@@ -291,7 +282,9 @@ export function registerDeployCommand(agentCommand: Command) {
 							if (!confirmCreation) {
 								return;
 							}
+						}
 
+						if (!targetAgent) {
 							const response =
 								await apis.agentsApi.machineAgentControllerCreateMachineAgent(
 									projectData.id,
