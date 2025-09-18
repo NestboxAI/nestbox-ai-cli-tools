@@ -2,7 +2,11 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { resolveProject } from "../../utils/project";
 import { loadNestboxConfig } from "../../utils/agent";
-import { createApis, loadAgentFromYaml } from "./apiUtils";
+import {
+	createApis,
+	loadAgentFromYaml,
+	loadAllAgentNamesFromYaml, // UPDATED
+} from "./apiUtils";
 
 type CreateAgentOptions = {
 	agent: string; // agent name
@@ -12,6 +16,7 @@ type CreateAgentOptions = {
 	project?: string;
 	type?: string;
 	prefix?: string;
+	all?: boolean; // NEW
 };
 
 type AgentCreateData = {
@@ -84,9 +89,7 @@ async function buildAgentData(
 		}
 
 		createAgentData.goal = manifestAgent.description;
-		createAgentData.inputSchema = {};
-		createAgentData.inputSchema = manifestAgent.inputSchema;
-
+		createAgentData.inputSchema = manifestAgent.inputSchema || {};
 		createAgentData.type = options.type || manifestAgent?.type || "REGULAR";
 	}
 
@@ -98,6 +101,7 @@ export function registerCreateCommand(agentCommand: Command) {
 		.command("create")
 		.description("Create an agent with direct arguments or YAML.")
 		.option("--agent <agent>", "Agent name to deploy")
+		.option("--all", "Deploy all agents defined in nestbox-agents.yaml") // NEW
 		.option(
 			"--project <project>",
 			"Project ID (defaults to current project)"
@@ -164,7 +168,71 @@ export function registerCreateCommand(agentCommand: Command) {
 					return;
 				}
 
-				// build & validate merged payload
+				// handle --all (iterate all manifest agent names)
+				if (options.all) {
+					let created = 0;
+					let failed = 0;
+					const names = await loadAllAgentNamesFromYaml();
+
+					if (!names.length) {
+						console.log(
+							chalk.yellow("No agents found in YAML manifest.")
+						);
+						return;
+					}
+
+					console.log(
+						chalk.cyan(
+							`Deploying ${names.length} agent(s) from YAML${options.prefix ? ` with prefix "${options.prefix}"` : ""}...`
+						)
+					);
+
+					const results: any[] = [];
+					for (const name of names) {
+						try {
+							const data = await buildAgentData(
+								{
+									...options,
+									project: projectData.id,
+									agent: name, // use name; buildAgentData will fetch full definition via loadAgentFromYaml
+								},
+								targetInstance
+							);
+
+							const res =
+								await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+									projectData.id,
+									{ ...data }
+								);
+
+							created++;
+							results.push(res.data);
+							console.log(
+								chalk.green(`✔ Created: ${data.agentName}`)
+							);
+						} catch (err: any) {
+							failed++;
+							const msg =
+								err?.response?.data?.message ||
+								err?.message ||
+								"Unknown error";
+							console.log(
+								chalk.red(`✖ Failed: ${name} — ${msg}`)
+							);
+						}
+					}
+
+					console.log(
+						chalk.cyan(
+							`Done. ${chalk.green(`${created} created`)}, ${chalk.red(
+								`${failed} failed`
+							)}.`
+						)
+					);
+					return results;
+				}
+
+				// original single-agent flow
 				const data = await buildAgentData(
 					{ ...options, project: projectData.id },
 					targetInstance
@@ -190,7 +258,9 @@ export function registerCreateCommand(agentCommand: Command) {
 				} else if (error.response) {
 					console.log(
 						chalk.red(
-							`API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`
+							`API Error (${error.response.status}): ${
+								error.response.data?.message || "Unknown error"
+							}`
 						)
 					);
 				} else {

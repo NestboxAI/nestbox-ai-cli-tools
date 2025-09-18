@@ -79,3 +79,35 @@ export async function loadAgentFromYaml(
 	const mf = doc as ManifestFile;
 	return mf.agents.find(a => a?.name === agentName);
 }
+
+export async function loadAllAgentNamesFromYaml(): Promise<string[]> {
+	const file = path.join(process.cwd(), "nestbox-agents.yaml");
+
+	try {
+		await fs.access(file);
+	} catch (err: any) {
+		if (err?.code === "ENOENT") return [];
+		throw new Error(`cannot access nestbox-agents.yaml: ${err.message}`);
+	}
+
+	const raw = await fs.readFile(file, "utf8");
+	const doc = yaml.load(raw) as unknown;
+
+	if (!validate(doc)) {
+		const msg = ajv.errorsText(validate.errors, { separator: "\n- " });
+		throw new Error(`invalid nestbox-agents.yaml:\n- ${msg}`);
+	}
+
+	const mf = doc as ManifestFile;
+	const names = Array.isArray(mf?.agents)
+		? (mf.agents.map(a => a?.name).filter(Boolean) as string[])
+		: [];
+
+	// de-duplicate by name, keep first occurrence
+	const seen = new Set<string>();
+	return names.filter(n => {
+		if (seen.has(n)) return false;
+		seen.add(n);
+		return true;
+	});
+}
