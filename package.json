@@ -51,6 +51,7 @@
     "@nestbox-ai/admin": "1.0.50",
     "@types/js-yaml": "^4.0.9",
     "adm-zip": "^0.5.16",
+    "ajv": "^8.17.1",
     "archiver": "^7.0.1",
     "axios": "^1.8.4",
     "chalk": "^4.1.2",

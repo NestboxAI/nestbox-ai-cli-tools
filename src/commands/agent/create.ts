@@ -1,31 +1,16 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import fs from "fs/promises";
-import path from "path";
-import yaml from "js-yaml";
 import { resolveProject } from "../../utils/project";
 import { loadNestboxConfig } from "../../utils/agent";
-import { createApis } from "./apiUtils";
-
-type ManifestAgent = {
-	name: string;
-	goal: string;
-	entry: string;
-	inputSchema: any;
-	type: string;
-};
+import { createApis, loadAgentFromYaml } from "./apiUtils";
 
 type CreateAgentOptions = {
-	type?: string;
-	goal?: string;
-	inputSchema?: any;
-	machineManifestId?: string;
+	agent: string; // agent name
+	description: string;
+	inputSchema: any;
+	instance: string;
 	project?: string;
-	instance?: string;
-	machineInstanceId?: number;
-	instanceIP?: string;
-	entryFunctionName?: string;
-	modelBaseId?: string;
+	type?: string;
 	prefix?: string;
 };
 
@@ -33,7 +18,7 @@ type AgentCreateData = {
 	type: string;
 	agentName: string;
 	goal: string;
-	inputSchema: any;
+	inputSchema: object;
 	machineManifestId: string;
 	projectId: string;
 	machineName: string;
@@ -42,11 +27,6 @@ type AgentCreateData = {
 	userId: number;
 	entryFunctionName: string;
 	modelBaseId: string;
-	parameters: [{}];
-};
-
-type ConfigData = {
-	instance?: string;
 };
 
 type MachineInstanceData = {
@@ -55,87 +35,62 @@ type MachineInstanceData = {
 	internalIP?: string;
 };
 
-type ManifestFile = { agents: ManifestAgent[] };
-
-async function loadAgentFromManifest(
-	agentName: string
-): Promise<ManifestAgent | undefined> {
-	const file = path.join(process.cwd(), "nestbox-agents.yaml");
-
-	try {
-		await fs.access(file);
-	} catch (err: any) {
-		if (err?.code === "ENOENT") return undefined;
-		throw new Error(`cannot access nestbox-agents.yaml: ${err.message}`);
-	}
-
-	const raw = await fs.readFile(file, "utf8");
-	const doc = yaml.load(raw) as ManifestFile | undefined;
-
-	if (!doc || !Array.isArray((doc as any)?.agents)) {
-		throw new Error(
-			`invalid nestbox-agets.yaml: root must contain an "agents" array`
-		);
-	}
-
-	return doc.agents.find(a => a?.name === agentName);
-}
-
-function buildAgentData(
-	agentName: string,
-	options: CreateAgentOptions = {},
-	manifestAgent?: ManifestAgent,
-	configData: ConfigData = {},
+async function buildAgentData(
+	options: CreateAgentOptions,
 	machineInstanceData: MachineInstanceData = {}
-): AgentCreateData {
-	const merged = {
-		type: options.type ?? manifestAgent?.type,
-		agentName: options.prefix
-			? options.prefix + "-" + agentName
-			: agentName,
-		goal: options.goal ?? manifestAgent?.goal,
-		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
+): Promise<AgentCreateData> {
+	const createAgentData = {
+		agentName: "",
+		goal: "",
+		inputSchema: {},
+
 		machineManifestId: machineInstanceData.machineId,
-		projectId: options.project,
-		machineName: options.instance ?? configData.instance,
+		machineName: options.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
-		entryFunctionName:
-			options.entryFunctionName ?? manifestAgent?.entry ?? "",
+
+		projectId: options.project,
+		type: options?.type || "REGULAR",
 		userId: 0,
 		modelBaseId: "",
+		entryFunctionName: "",
 	};
 
-	const required: (keyof AgentCreateData)[] = [
-		"type",
-		"agentName",
-		"goal",
-		"inputSchema",
-		"machineManifestId",
-		"projectId",
-		"machineName",
-		"machineInstanceId",
-		"instanceIP",
-		"userId",
-	];
+	// check agent name and add prefix
+	if (!options.agent) {
+		throw new Error("Missing required argument <agent>.");
+	}
+	createAgentData.agentName = options.prefix
+		? options.prefix + "-" + options.agent
+		: options.agent;
 
-	const missing = required.filter(k => {
-		const v = (merged as any)[k];
-		return (
-			v === undefined ||
-			v === null ||
-			(typeof v === "string" && v.trim?.() === "")
-		);
-	});
+	// agent creation using arguments
+	if (options.description || options.inputSchema) {
+		if (!options.description) {
+			throw new Error("Missing required argument <description>.");
+		}
+		if (!options.inputSchema) {
+			throw new Error("Missing required argument <inputSchema>.");
+		}
+		createAgentData.goal = options.description;
+		createAgentData.inputSchema = JSON.parse(options.inputSchema);
+	} else {
+		const manifestAgent = await loadAgentFromYaml(options.agent);
 
-	if (missing.length) {
-		throw new Error(
-			`missing required fields: ${missing.join(", ")}. ` +
-				`supply them via flags or add them to the "${agentName}" entry in nestbox-agents.yaml.`
-		);
+		if (!manifestAgent) {
+			throw new Error(
+				"Could not find a yaml file definition of an agent or agent not defined in yaml file."
+			);
+		}
+
+		createAgentData.goal = manifestAgent.description;
+		createAgentData.inputSchema = {};
+		createAgentData.inputSchema = manifestAgent.inputSchema;
+
+		createAgentData.type = options.type || manifestAgent?.type || "REGULAR";
 	}
 
-	return merged as AgentCreateData;
+	return createAgentData as AgentCreateData;
 }
 
 export function registerCreateCommand(agentCommand: Command) {
@@ -152,47 +107,32 @@ export function registerCreateCommand(agentCommand: Command) {
 			"--prefix <prefix>",
 			"A prefix added to beginning of the agent name."
 		)
-		.option("--goal <goal>", "Goal/description of the agent")
+		.option("--description <description>", "Description of the agent")
 		.option("--instance <instance>", "Machine name")
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.action(async (options): Promise<any> => {
 			try {
 				const apis = createApis();
 
-				if (!options?.agent) {
-					console.log(chalk.red("Parameter <agent> not provided."));
-					return;
-				}
-
 				// resolve project
 				const projectData = await resolveProject(apis.projectsApi, {
-					project: options.project,
+					project: options?.project || "",
 					instance: options?.instance || "",
 					...options,
 				});
 
-				// read YAML (if present) for this agent
-				const manifestAgent = await loadAgentFromManifest(
-					options.agent
-				);
-
-				if (!manifestAgent) {
-					console.log(
-						chalk.yellow("No manifest agent found with this name.")
-					);
-				}
-
 				const projectRoot = process.cwd();
-				const configData = loadNestboxConfig(projectRoot);
+				const nestboxConfig = loadNestboxConfig(projectRoot);
 
-				if (!options?.instance && !configData?.instance) {
+				if (!options?.instance && !nestboxConfig?.instance) {
 					console.log(
 						chalk.red("Parameter <instance> not provided.")
 					);
 					return;
 				}
 
-				const machineName = options.instance || configData.instance;
+				const machineName =
+					options?.instance || nestboxConfig?.instance;
 
 				const instanceData: any =
 					await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
@@ -225,18 +165,17 @@ export function registerCreateCommand(agentCommand: Command) {
 				}
 
 				// build & validate merged payload
-				const data = buildAgentData(
-					options.agent,
+				const data = await buildAgentData(
 					{ ...options, project: projectData.id },
-					manifestAgent,
-					configData,
 					targetInstance
 				);
 
 				const response =
 					await apis.agentsApi.machineAgentControllerCreateMachineAgent(
 						projectData.id,
-						{ ...data }
+						{
+							...data,
+						}
 					);
 
 				console.log(chalk.green("Agent successfully created."));
