@@ -2,7 +2,6 @@ import { Command } from "commander";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
-import yaml from "js-yaml";
 import { getAuthToken } from "../../utils/auth";
 import { withTokenRefresh } from "../../utils/error";
 import ora from "ora";
@@ -14,7 +13,7 @@ import {
 	runPredeployScripts,
 } from "../../utils/agent";
 import axios from "axios";
-import { createApis } from "./apiUtils";
+import { createApis, loadAgentFromYaml } from "./apiUtils";
 import inquirer from "inquirer";
 
 type ManifestAgent = {
@@ -37,6 +36,20 @@ type CreateAgentOptions = {
 	entryFunctionName?: string;
 	modelBaseId?: string;
 	prefix?: string;
+};
+
+type DeployAgentOptions = {
+	agent: string; // agent name
+	description?: string;
+	inputSchema?: any;
+	instance: string;
+	project?: string;
+	type?: string;
+	prefix?: string;
+	all?: boolean;
+	entryFunction: string;
+	log?: boolean;
+	silent?: boolean;
 };
 
 type AgentCreateData = {
@@ -65,110 +78,88 @@ type MachineInstanceData = {
 	internalIP?: string;
 };
 
-type ManifestFile = { agents: ManifestAgent[] };
-
-async function loadAgentFromManifest(
-	agentName: string
-): Promise<ManifestAgent | undefined> {
-	const file = path.join(process.cwd(), "nestbox-agents.yaml");
-
-	try {
-		await fs.accessSync(file);
-	} catch (err: any) {
-		if (err?.code === "ENOENT") return undefined;
-		throw new Error(`cannot access nestbox-agents.yaml: ${err.message}`);
-	}
-
-	const raw = await fs.readFileSync(file, "utf8");
-	const doc = yaml.load(raw) as ManifestFile | undefined;
-
-	if (!doc || !Array.isArray((doc as any)?.agents)) {
-		throw new Error(
-			`invalid nestbox-agets.yaml: root must contain an "agents" array`
-		);
-	}
-
-	return doc.agents.find(a => a?.name === agentName);
-}
-
-function buildAgentData(
-	agentName: string,
-	options: CreateAgentOptions = {},
-	manifestAgent?: ManifestAgent,
-	configData: ConfigData = {},
+async function buildAgentData(
+	options: DeployAgentOptions,
 	machineInstanceData: MachineInstanceData = {}
-): AgentCreateData {
-	const merged = {
-		type: options.type ?? manifestAgent?.type,
-		agentName: options.prefix
-			? options.prefix + "-" + agentName
-			: agentName,
-		goal: options.goal ?? manifestAgent?.goal,
-		inputSchema: options.inputSchema ?? manifestAgent?.inputSchema,
+): Promise<AgentCreateData> {
+	const deployAgentData = {
+		agentName: "",
+		goal: "",
+		inputSchema: {},
+
 		machineManifestId: machineInstanceData.machineId,
-		projectId: options.project,
-		machineName: options.instance ?? configData.instance,
+		machineName: options.instance,
 		machineInstanceId: machineInstanceData.id,
 		instanceIP: machineInstanceData.internalIP,
-		entryFunctionName:
-			options.entryFunctionName ?? manifestAgent?.entry ?? "",
+
+		projectId: options.project,
+		type: options?.type || "REGULAR",
 		userId: 0,
 		modelBaseId: "",
+		entryFunctionName: "",
 	};
-	const required: (keyof AgentCreateData)[] = [
-		"type",
-		"agentName",
-		"goal",
-		"inputSchema",
-		"machineManifestId",
-		"projectId",
-		"machineName",
-		"machineInstanceId",
-		"instanceIP",
-		"userId",
-		"entryFunctionName",
-	];
 
-	const missing = required.filter(k => {
-		const v = (merged as any)[k];
-		return (
-			v === undefined ||
-			v === null ||
-			(typeof v === "string" && v.trim?.() === "")
-		);
-	});
+	// check agent name and add prefix
+	if (!options.agent) {
+		throw new Error("Missing required argument <agent>.");
+	}
+	deployAgentData.agentName = options.prefix
+		? options.prefix + "-" + options.agent
+		: options.agent;
 
-	if (missing.length) {
-		throw new Error(
-			`missing required fields: ${missing.join(", ")}. ` +
-				`supply them via flags or add them to the "${agentName}" entry in nestbox-agents.yaml.`
-		);
+	// agent deployment using arguments
+	if (options.description || options.inputSchema || options.entryFunction) {
+		if (!options.description) {
+			throw new Error("Missing required argument <description>.");
+		}
+		if (!options.inputSchema) {
+			throw new Error("Missing required argument <inputSchema>.");
+		}
+		if (!options.entryFunction) {
+			throw new Error("Missing required argument <entryFunction>.");
+		}
+		deployAgentData.goal = options.description;
+		deployAgentData.inputSchema = JSON.parse(options.inputSchema);
+		deployAgentData.entryFunctionName = options.entryFunction;
+	} else {
+		const manifestAgent = await loadAgentFromYaml(options.agent);
+
+		if (!manifestAgent) {
+			throw new Error(
+				"Could not find a yaml file definition of an agent or agent not defined in yaml file."
+			);
+		}
+
+		deployAgentData.entryFunctionName = manifestAgent.entry;
+		deployAgentData.goal = manifestAgent.description;
+		deployAgentData.inputSchema = manifestAgent.inputSchema || {};
+		deployAgentData.type = options.type || manifestAgent?.type || "REGULAR";
 	}
 
-	return merged as AgentCreateData;
+	return deployAgentData as AgentCreateData;
 }
 
 export function registerDeployCommand(agentCommand: Command) {
 	agentCommand
 		.command("deploy")
 		.description("Deploy an AI agent to the Nestbox platform")
+		.option(
+			"--prefix <prefix>",
+			"A prefix added to beginning of the agent name."
+		)
 		.option("--agent <agent>", "Agent name to deploy")
+		.option("--description <description>", "Goal/description of the agent")
+		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.option(
 			"--project <project>",
 			"Project ID (defaults to current project)"
 		)
 		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
-		.option(
-			"--prefix <prefix>",
-			"A prefix added to beginning of the agent name."
-		)
 		.option("--entryFunction <entryFunction>", "Entry function name")
-		.option("--goal <goal>", "Goal/description of the agent")
 		.option("--instance <instance>", "Machine name")
-		.option("--inputSchema <inputSchema>", "Agent input schema")
-		.option("--path <path>", "Path to the zip file or directory to upload")
 		.option("--log", "Show detailed logs during deployment")
 		.option("--silent", "Disable automatic agent creation.")
+		.option("--all", "Deploy all agents defined in nestbox-agents.yaml")
 		.action(async (options): Promise<any> => {
 			try {
 				let apis = createApis();
@@ -191,7 +182,7 @@ export function registerDeployCommand(agentCommand: Command) {
 							}
 						);
 
-						const manifestAgent = await loadAgentFromManifest(
+						const manifestAgent = await loadAgentFromYaml(
 							options.agent
 						);
 
@@ -247,11 +238,12 @@ export function registerDeployCommand(agentCommand: Command) {
 						}
 
 						// build and validate merged payload
-						const data = buildAgentData(
-							options.agent,
-							{ ...options, project: projectData.id },
-							manifestAgent,
-							config,
+						const data = await buildAgentData(
+							{
+								...options,
+								project: projectData.id,
+								instance: machineName,
+							},
 							targetInstance
 						);
 
@@ -313,86 +305,31 @@ export function registerDeployCommand(agentCommand: Command) {
 
 						try {
 							let zipFilePath;
-							let customZipPath = options.path;
 
-							if (customZipPath) {
-								// Process custom zip path
-								if (!fs.existsSync(customZipPath)) {
-									spinner.fail(
-										`Path not found: ${customZipPath}`
-									);
-									return;
-								}
+							// Use project root
+							spinner.text = `Using project root: ${projectRoot}`;
 
-								const stats = fs.statSync(customZipPath);
+							const isTypeScript =
+								isTypeScriptProject(projectRoot);
 
-								if (stats.isFile()) {
-									if (
-										!customZipPath
-											.toLowerCase()
-											.endsWith(".zip")
-									) {
-										spinner.fail(
-											`File is not a zip archive: ${customZipPath}`
-										);
-										return;
-									}
-									spinner.text = `Using provided zip file: ${customZipPath}`;
-									zipFilePath = customZipPath;
-								} else if (stats.isDirectory()) {
-									// Process directory
-									spinner.text = `Processing directory: ${customZipPath}`;
-
-									const isTypeScript =
-										isTypeScriptProject(customZipPath);
-
-									if (
-										isTypeScript &&
-										(config?.agent?.predeploy ||
-											config?.agents?.predeploy)
-									) {
-										const predeployScripts =
-											config?.agent?.predeploy ||
-											config?.agents?.predeploy;
-										spinner.text = `Running predeploy scripts on target directory...`;
-										await runPredeployScripts(
-											predeployScripts,
-											customZipPath
-										);
-									}
-
-									spinner.text = `Creating zip archive from directory ${customZipPath}...`;
-									zipFilePath =
-										createZipFromDirectory(customZipPath);
-									spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-								}
-							} else {
-								// Use project root
-								spinner.text = `Using project root: ${projectRoot}`;
-
-								const isTypeScript =
-									isTypeScriptProject(projectRoot);
-
-								if (
-									isTypeScript &&
-									(config?.agent?.predeploy ||
-										config?.agents?.predeploy)
-								) {
-									const predeployScripts =
-										config?.agent?.predeploy ||
-										config?.agents?.predeploy;
-									spinner.text = `Running predeploy scripts on project root...`;
-									await runPredeployScripts(
-										predeployScripts,
-										projectRoot
-									);
-								}
-
-								spinner.text = `Creating zip archive from project root ${projectRoot}...`;
-								zipFilePath =
-									createZipFromDirectory(projectRoot);
-								spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+							if (
+								isTypeScript &&
+								(config?.agent?.predeploy ||
+									config?.agents?.predeploy)
+							) {
+								const predeployScripts =
+									config?.agent?.predeploy ||
+									config?.agents?.predeploy;
+								spinner.text = `Running predeploy scripts on project root...`;
+								await runPredeployScripts(
+									predeployScripts,
+									projectRoot
+								);
 							}
+
+							spinner.text = `Creating zip archive from project root ${projectRoot}...`;
+							zipFilePath = createZipFromDirectory(projectRoot);
+							spinner.text = `Directory zipped successfully to ${zipFilePath}`;
 
 							spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
 
@@ -473,14 +410,6 @@ export function registerDeployCommand(agentCommand: Command) {
 									},
 								}
 							);
-
-							if (
-								!customZipPath &&
-								zipFilePath &&
-								fs.existsSync(zipFilePath)
-							) {
-								fs.unlinkSync(zipFilePath);
-							}
 
 							if (options.log) {
 								console.log(
