@@ -13,7 +13,11 @@ import {
 	runPredeployScripts,
 } from "../../utils/agent";
 import axios from "axios";
-import { createApis, loadAgentFromYaml } from "./apiUtils";
+import {
+	createApis,
+	loadAgentFromYaml,
+	loadAllAgentNamesFromYaml,
+} from "./apiUtils";
 import inquirer from "inquirer";
 
 type ManifestAgent = {
@@ -99,7 +103,6 @@ async function buildAgentData(
 		entryFunctionName: "",
 	};
 
-	// check agent name and add prefix
 	if (!options.agent) {
 		throw new Error("Missing required argument <agent>.");
 	}
@@ -107,7 +110,6 @@ async function buildAgentData(
 		? options.prefix + "-" + options.agent
 		: options.agent;
 
-	// agent deployment using arguments
 	if (options.description || options.inputSchema || options.entryFunction) {
 		if (!options.description) {
 			throw new Error("Missing required argument <description>.");
@@ -166,13 +168,27 @@ export function registerDeployCommand(agentCommand: Command) {
 
 				await withTokenRefresh(
 					async () => {
-						if (!options?.agent) {
-							console.log(
-								chalk.red("Parameter <agent> not provided.")
-							);
-							return;
+						let names: string[] = [];
+						if (options.all) {
+							names = await loadAllAgentNamesFromYaml();
+							if (!names.length) {
+								console.log(
+									chalk.yellow(
+										"No agents found in YAML manifest."
+									)
+								);
+								return;
+							}
+						} else {
+							if (!options?.agent) {
+								console.log(
+									chalk.red("Parameter <agent> not provided.")
+								);
+								return;
+							}
+							names = [options.agent];
 						}
-						// resolve project
+
 						const projectData = await resolveProject(
 							apis.projectsApi,
 							{
@@ -182,17 +198,6 @@ export function registerDeployCommand(agentCommand: Command) {
 							}
 						);
 
-						const manifestAgent = await loadAgentFromYaml(
-							options.agent
-						);
-
-						if (!manifestAgent) {
-							console.log(
-								chalk.yellow(
-									"No manifest agent found with this name."
-								)
-							);
-						}
 						const projectRoot = process.cwd();
 						const config = loadNestboxConfig(projectRoot);
 
@@ -237,239 +242,254 @@ export function registerDeployCommand(agentCommand: Command) {
 							return;
 						}
 
-						// build and validate merged payload
-						const data = await buildAgentData(
-							{
-								...options,
-								project: projectData.id,
-								instance: machineName,
-							},
-							targetInstance
-						);
-
-						const agentsData: any =
-							await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
-								projectData.id,
-								0,
-								10,
-								data.type
+						for (const name of names) {
+							const data = await buildAgentData(
+								{
+									...options,
+									project: projectData.id,
+									instance: machineName,
+									agent: name,
+								},
+								targetInstance
 							);
 
-						let targetAgent = agentsData.data.machineAgents.find(
-							(agent: any) => agent.agentName === data.agentName
-						);
-
-						if (!targetAgent && !options.silent) {
-							const { confirmCreation } = await inquirer.prompt([
-								{
-									type: "confirm",
-									name: "confirmCreation",
-									message: chalk.red(
-										"No agent with specified name found. Would you like to create one first before deployment?"
-									),
-									default: false,
-								},
-							]);
-
-							if (!confirmCreation) {
-								return;
-							}
-						}
-
-						if (!targetAgent) {
-							const response =
-								await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+							const agentsData: any =
+								await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
 									projectData.id,
-									{ ...data }
+									0,
+									10,
+									data.type
 								);
 
-							targetAgent = response.data;
-
-							console.log(
-								chalk.green("Created agent before deploying.")
-							);
-						}
-
-						// Extract IDs
-						const agentId = targetAgent.id;
-						const resolvedEntry =
-							data.entryFunctionName ||
-							targetAgent.entryFunctionName ||
-							"main";
-						const instanceId = targetInstance.id;
-
-						// Start the deployment process
-						const spinner = ora(
-							`Preparing to deploy ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`
-						).start();
-
-						try {
-							let zipFilePath;
-
-							// Use project root
-							spinner.text = `Using project root: ${projectRoot}`;
-
-							const isTypeScript =
-								isTypeScriptProject(projectRoot);
-
-							if (
-								isTypeScript &&
-								(config?.agent?.predeploy ||
-									config?.agents?.predeploy)
-							) {
-								const predeployScripts =
-									config?.agent?.predeploy ||
-									config?.agents?.predeploy;
-								spinner.text = `Running predeploy scripts on project root...`;
-								await runPredeployScripts(
-									predeployScripts,
-									projectRoot
+							let targetAgent =
+								agentsData.data.machineAgents.find(
+									(agent: any) =>
+										agent.agentName === data.agentName
 								);
-							}
 
-							spinner.text = `Creating zip archive from project root ${projectRoot}...`;
-							zipFilePath = createZipFromDirectory(projectRoot);
-							spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+							if (!targetAgent && !options.silent) {
+								const { confirmCreation } =
+									await inquirer.prompt([
+										{
+											type: "confirm",
+											name: "confirmCreation",
+											message: chalk.red(
+												`No agent with specified name "${data.agentName}" found. Would you like to create one first before deployment?`
+											),
+											default: false,
+										},
+									]);
 
-							spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
-
-							// Prepare deployment
-							const authToken = getAuthToken();
-							const baseUrl = authToken?.serverUrl?.endsWith("/")
-								? authToken.serverUrl.slice(0, -1)
-								: authToken?.serverUrl;
-
-							const { default: FormData } = await import(
-								"form-data"
-							);
-							const form = new FormData();
-
-							form.append(
-								"file",
-								fs.createReadStream(zipFilePath)
-							);
-							form.append("machineAgentId", agentId.toString());
-							form.append("instanceId", instanceId.toString());
-							form.append("entryFunctionName", resolvedEntry);
-							form.append("isSourceCodeUpdate", "true");
-							form.append("projectId", projectData.id);
-
-							if (options.log) {
-								console.log(chalk.blue("Form Details "));
-								console.log(
-									chalk.blue(
-										`  - File: ${path.basename(zipFilePath)}`
-									)
-								);
-								console.log(
-									chalk.blue(`  - Agent ID: ${agentId}`)
-								);
-								console.log(
-									chalk.blue(`  - Instance ID: ${instanceId}`)
-								);
-								console.log(
-									chalk.blue(
-										`  - Entry Function: ${resolvedEntry}`
-									)
-								);
-								console.log(
-									chalk.blue(
-										`  - Project ID: ${projectData.id}`
-									)
-								);
-							}
-
-							const axiosInstance = axios.create({
-								baseURL: baseUrl,
-								headers: {
-									...form.getHeaders(),
-									Authorization: authToken?.token,
-								},
-							});
-
-							const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
-
-							spinner.text = `Deploy ${options.agent}...`;
-							const res = await axiosInstance.patch(
-								endpoint,
-								form
-							);
-
-							await axios.patch(
-								baseUrl + endpoint,
-								{
-									projectId: data.projectId,
-									id: agentId,
-									agentName: data.agentName,
-									goal: data.goal,
-									inputSchema: data.inputSchema,
-								},
-								{
-									headers: {
-										Authorization: authToken?.token,
-									},
+								if (!confirmCreation) {
+									continue;
 								}
-							);
+							}
 
-							if (options.log) {
+							if (!targetAgent) {
+								const response =
+									await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+										projectData.id,
+										{ ...data }
+									);
+
+								targetAgent = response.data;
+
 								console.log(
-									chalk.blue("\nDeployment request:")
-								);
-								console.log(
-									chalk.blue(`  URL: ${baseUrl}${endpoint}`)
-								);
-								console.log(chalk.blue(`  Method: PATCH`));
-								console.log(
-									chalk.blue(
-										`  File: ${path.basename(zipFilePath)}`
+									chalk.green(
+										`Created agent ${data.agentName} before deploying.`
 									)
 								);
-								console.log(
-									chalk.blue(
-										`  Response status: ${res.status} ${res.statusText}`
-									)
+							}
+
+							const agentId = targetAgent.id;
+							const resolvedEntry =
+								data.entryFunctionName ||
+								targetAgent.entryFunctionName ||
+								"main";
+							const instanceId = targetInstance.id;
+
+							const spinner = ora(
+								`Preparing to deploy ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`
+							).start();
+
+							try {
+								let zipFilePath;
+
+								spinner.text = `Using project root: ${projectRoot}`;
+
+								const isTypeScript =
+									isTypeScriptProject(projectRoot);
+
+								if (
+									isTypeScript &&
+									(config?.agent?.predeploy ||
+										config?.agents?.predeploy)
+								) {
+									const predeployScripts =
+										config?.agent?.predeploy ||
+										config?.agents?.predeploy;
+									spinner.text = `Running predeploy scripts on project root...`;
+									await runPredeployScripts(
+										predeployScripts,
+										projectRoot
+									);
+								}
+
+								spinner.text = `Creating zip archive from project root ${projectRoot}...`;
+								zipFilePath =
+									createZipFromDirectory(projectRoot);
+								spinner.text = `Directory zipped successfully to ${zipFilePath}`;
+
+								spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
+
+								const authToken = getAuthToken();
+								const baseUrl = authToken?.serverUrl?.endsWith(
+									"/"
+								)
+									? authToken.serverUrl.slice(0, -1)
+									: authToken?.serverUrl;
+
+								const { default: FormData } = await import(
+									"form-data"
 								);
-								const lines = res.data.logEntries || [];
-								console.log(
-									chalk.blue(
-										`  Deployment log entries (${lines.length} lines):`
-									)
+								const form = new FormData();
+
+								form.append(
+									"file",
+									fs.createReadStream(zipFilePath)
 								);
-								lines.forEach((line: any) => {
+								form.append(
+									"machineAgentId",
+									agentId.toString()
+								);
+								form.append(
+									"instanceId",
+									instanceId.toString()
+								);
+								form.append("entryFunctionName", resolvedEntry);
+								form.append("isSourceCodeUpdate", "true");
+								form.append("projectId", projectData.id);
+
+								if (options.log) {
+									console.log(chalk.blue("Form Details "));
 									console.log(
 										chalk.blue(
-											`    - [${line.type} ${line.timestamp}] ${line.message} `
+											`  - File: ${path.basename(zipFilePath)}`
 										)
 									);
+									console.log(
+										chalk.blue(`  - Agent ID: ${agentId}`)
+									);
+									console.log(
+										chalk.blue(
+											`  - Instance ID: ${instanceId}`
+										)
+									);
+									console.log(
+										chalk.blue(
+											`  - Entry Function: ${resolvedEntry}`
+										)
+									);
+									console.log(
+										chalk.blue(
+											`  - Project ID: ${projectData.id}`
+										)
+									);
+								}
+
+								const axiosInstance = axios.create({
+									baseURL: baseUrl,
+									headers: {
+										...form.getHeaders(),
+										Authorization: authToken?.token,
+									},
 								});
+
+								const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
+
+								spinner.text = `Deploy ${name}...`;
+								const res = await axiosInstance.patch(
+									endpoint,
+									form
+								);
+
+								await axios.patch(
+									baseUrl + endpoint,
+									{
+										projectId: data.projectId,
+										id: agentId,
+										agentName: data.agentName,
+										goal: data.goal,
+										inputSchema: data.inputSchema,
+									},
+									{
+										headers: {
+											Authorization: authToken?.token,
+										},
+									}
+								);
+
+								if (options.log) {
+									console.log(
+										chalk.blue("\nDeployment request:")
+									);
+									console.log(
+										chalk.blue(
+											`  URL: ${baseUrl}${endpoint}`
+										)
+									);
+									console.log(chalk.blue(`  Method: PATCH`));
+									console.log(
+										chalk.blue(
+											`  File: ${path.basename(zipFilePath)}`
+										)
+									);
+									console.log(
+										chalk.blue(
+											`  Response status: ${res.status} ${res.statusText}`
+										)
+									);
+									const lines = res.data.logEntries || [];
+									console.log(
+										chalk.blue(
+											`  Deployment log entries (${lines.length} lines):`
+										)
+									);
+									lines.forEach((line: any) => {
+										console.log(
+											chalk.blue(
+												`    - [${line.type} ${line.timestamp}] ${line.message} `
+											)
+										);
+									});
+								}
+								spinner.succeed("Successfully deployed");
+								console.log(
+									chalk.green(
+										`${data.agentName} deployed successfully!`
+									)
+								);
+								console.log(
+									chalk.cyan(
+										`📍 Instance: ${data.machineName}`
+									)
+								);
+								console.log(
+									chalk.cyan(`🤖 Agent: ${name} (${agentId})`)
+								);
+								console.log(
+									chalk.cyan(`⚙️ Entry: ${resolvedEntry}`)
+								);
+								console.log(
+									chalk.cyan(
+										`🔄 Process: ${res.data.processName}`
+									)
+								);
+							} catch (error: any) {
+								spinner.fail(
+									`Failed to deploy ${data.agentName.toLowerCase()}`
+								);
 							}
-							spinner.succeed("Successfully deployed");
-							console.log(
-								chalk.green(
-									`${data.agentName} deployed successfully!`
-								)
-							);
-							console.log(
-								chalk.cyan(`📍 Instance: ${data.machineName}`)
-							);
-							console.log(
-								chalk.cyan(
-									`🤖 Agent: ${options.agent} (${agentId})`
-								)
-							);
-							console.log(
-								chalk.cyan(`⚙️ Entry: ${resolvedEntry}`)
-							);
-							console.log(
-								chalk.cyan(
-									`🔄 Process: ${res.data.processName}`
-								)
-							);
-						} catch (error: any) {
-							spinner.fail(
-								`Failed to deploy ${data.agentName.toLowerCase()}`
-							);
-							throw error;
 						}
 					},
 					() => {
