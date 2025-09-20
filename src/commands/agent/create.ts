@@ -1,105 +1,271 @@
-import { Configuration, MachineAgentApi, ProjectsApi } from "@nestbox-ai/admin";
-import { getAuthToken } from "../../utils/auth";
+import { Command } from "commander";
+import chalk from "chalk";
 import { resolveProject } from "../../utils/project";
+import { loadNestboxConfig } from "../../utils/agent";
+import {
+	createApis,
+	loadAgentFromYaml,
+	loadAllAgentNamesFromYaml, 
+} from "./apiUtils";
 
-export interface CreateAgentOptions {
-  lang?: string;
-  template?: string;
-  project?: string;
-  instanceName?: string;
-  machineManifestId?: string;
-  type?: string;
-  goal?: string;
-  modelBaseId?: string;
-  machineName?: string;
-  machineInstanceId?: number;
-  instanceIP?: string;
-  userId?: number;
-  parameters?: Array<{name: string; description: string; default: any}>;
+type CreateAgentOptions = {
+	agent: string; // agent name
+	description: string;
+	inputSchema: any;
+	instance: string;
+	project?: string;
+	type?: string;
+	prefix?: string;
+	all?: boolean; 
+};
+
+type AgentCreateData = {
+	type: string;
+	agentName: string;
+	goal: string;
+	inputSchema: object;
+	machineManifestId: string;
+	projectId: string;
+	machineName: string;
+	machineInstanceId: number;
+	instanceIP: string;
+	userId: number;
+	entryFunctionName: string;
+	modelBaseId: string;
+};
+
+type MachineInstanceData = {
+	machineId?: string;
+	id?: number;
+	internalIP?: string;
+};
+
+async function buildAgentData(
+	options: CreateAgentOptions,
+	machineInstanceData: MachineInstanceData = {}
+): Promise<AgentCreateData> {
+	const createAgentData = {
+		agentName: "",
+		goal: "",
+		inputSchema: {},
+
+		machineManifestId: machineInstanceData.machineId,
+		machineName: options.instance,
+		machineInstanceId: machineInstanceData.id,
+		instanceIP: machineInstanceData.internalIP,
+
+		projectId: options.project,
+		type: options?.type || "REGULAR",
+		userId: 0,
+		modelBaseId: "",
+		entryFunctionName: "",
+	};
+
+	// check agent name and add prefix
+	if (!options.agent) {
+		throw new Error("Missing required argument <agent>.");
+	}
+	createAgentData.agentName = options.prefix
+		? options.prefix + "-" + options.agent
+		: options.agent;
+
+	// agent creation using arguments
+	if (options.description || options.inputSchema) {
+		if (!options.description) {
+			throw new Error("Missing required argument <description>.");
+		}
+		if (!options.inputSchema) {
+			throw new Error("Missing required argument <inputSchema>.");
+		}
+		createAgentData.goal = options.description;
+		createAgentData.inputSchema = JSON.parse(options.inputSchema);
+	} else {
+		const manifestAgent = await loadAgentFromYaml(options.agent);
+
+		if (!manifestAgent) {
+			throw new Error(
+				"Could not find a yaml file definition of an agent or agent not defined in yaml file."
+			);
+		}
+
+		createAgentData.goal = manifestAgent.description;
+		createAgentData.inputSchema = manifestAgent.inputSchema || {};
+		createAgentData.type = options.type || manifestAgent?.type || "REGULAR";
+	}
+
+	return createAgentData as AgentCreateData;
 }
 
-/**
- * Create a new agent in the Nestbox platform
- * 
- * @param agentName The name of the agent
- * @param options Options including lang, template, and project
- * @param agentsApi The MachineAgentApi instance
- * @param projectsApi The ProjectsApi instance
- */
-export async function createAgent(
-  agentName: string, 
-  options: CreateAgentOptions,
-  agentsApi?: MachineAgentApi,
-  projectsApi?: ProjectsApi
-): Promise<any> {
-  const authToken = getAuthToken();
-  if (!authToken) {
-    throw new Error("No authentication token found. Please login first.");
-  }
+export function registerCreateCommand(agentCommand: Command) {
+	agentCommand
+		.command("create")
+		.description("Create an agent with direct arguments or YAML.")
+		.option("--agent <agent>", "Agent name to deploy")
+		.option("--all", "Deploy all agents defined in nestbox-agents.yaml") 
+		.option(
+			"--project <project>",
+			"Project ID (defaults to current project)"
+		)
+		.option("--type <type>", "Agent type (e.g. CHAT, AGENT, REGULAR)")
+		.option(
+			"--prefix <prefix>",
+			"A prefix added to beginning of the agent name."
+		)
+		.option("--description <description>", "Description of the agent")
+		.option("--instance <instance>", "Machine name")
+		.option("--inputSchema <inputSchema>", "Agent input schema")
+		.action(async (options): Promise<any> => {
+			try {
+				const apis = createApis();
 
-  // Create API instances if not provided
-  if (!agentsApi || !projectsApi) {
-    const configuration = new Configuration({
-      basePath: authToken?.serverUrl,
-      baseOptions: {
-        headers: {
-          Authorization: authToken?.token,
-        },
-      },
-    });
+				// resolve project
+				const projectData = await resolveProject(apis.projectsApi, {
+					project: options?.project || "",
+					instance: options?.instance || "",
+					...options,
+				});
 
-    agentsApi = agentsApi || new MachineAgentApi(configuration);
-    projectsApi = projectsApi || new ProjectsApi(configuration);
-  }
+				const projectRoot = process.cwd();
+				const nestboxConfig = loadNestboxConfig(projectRoot);
 
-  // Resolve project - convert options to match CommandOptions interface
-  const projectData = await resolveProject(projectsApi, {
-    project: options.project,
-    instance: options.instanceName || '',
-    ...options
-  });
+				if (!options?.instance && !nestboxConfig?.instance) {
+					console.log(
+						chalk.red("Parameter <instance> not provided.")
+					);
+					return;
+				}
 
-  // Prepare agent creation payload
-  // Determine the correct type value based on options.type
-  const agentTypeValue = options.type?.includes("AGENT") ? "REGULAR" : options.type || "CHAT";
+				const machineName =
+					options?.instance || nestboxConfig?.instance;
 
-  const payload: any = {
-    agentName,
-    goal: options.goal || `AI agent for ${agentName}`,
-    modelBaseId: options.modelBaseId || "",
-    machineName: options.machineName,
-    machineInstanceId: options.machineInstanceId,
-    instanceIP: options.instanceIP,
-    machineManifestId: options.machineManifestId,
-    parameters: options.parameters?.map((param: any) => ({
-      name: param.name,
-      description: param.description,
-      default_value: param.default || "",
-      isUserParam: param.isUserParam !== undefined ? param.isUserParam : true
-    })) || [],
-    projectId: projectData.id,
-    type: agentTypeValue,
-    userId: options.userId || 0,
-  };
+				const instanceData: any =
+					await apis.instanceApi.machineInstancesControllerGetMachineInstanceByUserId(
+						projectData.id,
+						0,
+						10
+					);
 
-  // Determine the type of resource (Agent or Chat)
-  const agentType = options.type || "CHAT";
-  const resourceType = agentType === "AGENT" || agentType === "REGULAR" ? "Agent" : "Chatbot";
+				const targetInstance = instanceData.data.machineInstances.find(
+					(instance: any) => instance.instanceName === machineName
+				);
 
-  // Create the agent
-  try {
-    const response = await agentsApi.machineAgentControllerCreateMachineAgent(
-      projectData.id,
-      payload
-    );
-    return response.data;
-  } catch (error: any) {
-    if (error.response && error.response.status === 401) {
-      throw new Error('Authentication token has expired. Please login again using "nestbox login <domain>".');
-    } else if (error.response) {
-      throw new Error(`API Error (${error.response.status}): ${error.response.data?.message || "Unknown error"}`);
-    } else {
-      throw new Error(error.message || "Unknown error");
-    }
-  }
+				if (!targetInstance) {
+					console.error(
+						chalk.red(
+							`Instance with name "${machineName}" not found in project "${projectData.name}".`
+						)
+					);
+					console.log(chalk.yellow("Available instances:"));
+					instanceData.data.machineInstances.forEach(
+						(instance: any) => {
+							console.log(
+								chalk.yellow(
+									`  - ${instance.instanceName} (ID: ${instance.id})`
+								)
+							);
+						}
+					);
+					return;
+				}
+
+				// handle --all (iterate all manifest agent names)
+				if (options.all) {
+					let created = 0;
+					let failed = 0;
+					const names = await loadAllAgentNamesFromYaml();
+
+					if (!names.length) {
+						console.log(
+							chalk.yellow("No agents found in YAML manifest.")
+						);
+						return;
+					}
+
+					console.log(
+						chalk.cyan(
+							`Deploying ${names.length} agent(s) from YAML${options.prefix ? ` with prefix "${options.prefix}"` : ""}...`
+						)
+					);
+
+					const results: any[] = [];
+					for (const name of names) {
+						try {
+							const data = await buildAgentData(
+								{
+									...options,
+									project: projectData.id,
+									agent: name, // use name; buildAgentData will fetch full definition via loadAgentFromYaml
+								},
+								targetInstance
+							);
+
+							const res =
+								await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+									projectData.id,
+									{ ...data }
+								);
+
+							created++;
+							results.push(res.data);
+							console.log(
+								chalk.green(`✔ Created: ${data.agentName}`)
+							);
+						} catch (err: any) {
+							failed++;
+							const msg =
+								err?.response?.data?.message ||
+								err?.message ||
+								"Unknown error";
+							console.log(
+								chalk.red(`✖ Failed: ${name} — ${msg}`)
+							);
+						}
+					}
+
+					console.log(
+						chalk.cyan(
+							`Done. ${chalk.green(`${created} created`)}, ${chalk.red(
+								`${failed} failed`
+							)}.`
+						)
+					);
+					return results;
+				}
+
+				// original single-agent flow
+				const data = await buildAgentData(
+					{ ...options, project: projectData.id },
+					targetInstance
+				);
+
+				const response =
+					await apis.agentsApi.machineAgentControllerCreateMachineAgent(
+						projectData.id,
+						{
+							...data,
+						}
+					);
+
+				console.log(chalk.green("Agent successfully created."));
+				return response.data;
+			} catch (error: any) {
+				if (error.response && error.response.status === 401) {
+					console.log(
+						chalk.red(
+							'Authentication token has expired. Please login again using "nestbox login <domain>".'
+						)
+					);
+				} else if (error.response) {
+					console.log(
+						chalk.red(
+							`API Error (${error.response.status}): ${
+								error.response.data?.message || "Unknown error"
+							}`
+						)
+					);
+				} else {
+					console.log(chalk.red(error.message || "Unknown error"));
+				}
+			}
+		});
 }
