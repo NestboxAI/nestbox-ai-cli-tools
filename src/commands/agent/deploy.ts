@@ -19,6 +19,7 @@ import {
 	loadAllAgentNamesFromYaml,
 } from "./apiUtils";
 import inquirer from "inquirer";
+import { setupAuthAndConfig } from "../../utils/api";
 
 type ManifestAgent = {
 	name: string;
@@ -342,10 +343,19 @@ export function registerDeployCommand(agentCommand: Command) {
 
 								spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
 
-								const authToken = getAuthToken();
-								const baseUrl = authToken?.apiURL?.endsWith("/")
-									? authToken.apiURL.slice(0, -1)
-									: authToken?.apiURL;
+								const authResult = await setupAuthAndConfig();
+								if (!authResult) {
+									throw new Error(
+										"No authentication token found. Please log in first."
+									);
+								}
+								const baseUrl =
+									authResult.authData?.apiURL?.endsWith("/")
+										? authResult.authData?.apiURL.slice(
+												0,
+												-1
+											)
+										: authResult.authData?.apiURL;
 
 								const { default: FormData } = await import(
 									"form-data"
@@ -399,7 +409,8 @@ export function registerDeployCommand(agentCommand: Command) {
 									baseURL: baseUrl,
 									headers: {
 										...form.getHeaders(),
-										Authorization: authToken?.token,
+										Authorization:
+											authResult.authData?.token,
 									},
 								});
 
@@ -422,7 +433,8 @@ export function registerDeployCommand(agentCommand: Command) {
 									},
 									{
 										headers: {
-											Authorization: authToken?.token,
+											Authorization:
+												authResult.authData.token,
 										},
 									}
 								);
