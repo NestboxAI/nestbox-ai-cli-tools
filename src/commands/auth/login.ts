@@ -156,11 +156,11 @@ export function registerLoginCommand(program: Command): void {
 
 							// Create credentials object
 							const credentials = {
-								api_url: apiURL,
-								id_token: idToken,
-								cli_token: cliToken,
-								refresh_token: refreshToken,
-								expires_at: expiresAt,
+								apiURL: apiURL,
+								idToken: idToken,
+								cliToken: cliToken,
+								refreshToken: refreshToken,
+								expiresAt: expiresAt,
 								email,
 								name,
 								picture,
