@@ -20,16 +20,9 @@ if (!fs.existsSync(CONFIG_DIR)) {
 /**
  * Get authentication token for a specific domain
  */
-export async function getAuthToken(domain?: string): Promise<{
-	apiURL: string;
-	idToken: string;
-	refreshToken: string;
-	cliToken: string;
-	expiresAt: string;
-	email: string;
-	picture: string;
-	token: string;
-} | null> {
+export async function getAuthToken(
+	domain?: string
+): Promise<UserCredentials | null> {
 	try {
 		const files = fs.readdirSync(CONFIG_DIR);
 		let configData;
@@ -107,6 +100,7 @@ export async function getAuthToken(domain?: string): Promise<{
 			expiresAt: configData.expiresAt,
 			email: configData.email,
 			picture: configData.picture || "",
+			domain: domain || "",
 			token: token,
 		};
 	} catch (error) {
@@ -134,7 +128,7 @@ export function listCredentials(): Array<{
 						fs.readFileSync(path.join(CONFIG_DIR, file)).toString()
 					) as UserCredentials;
 					return {
-						domain: data.apiURL,
+						domain: data.domain,
 						email: data.email,
 						name: data.name,
 					};

@@ -164,6 +164,7 @@ export function registerLoginCommand(program: Command): void {
 								email,
 								name,
 								picture,
+								domain: domain,
 							};
 
 							// Write to file
