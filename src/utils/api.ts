@@ -1,14 +1,16 @@
 import chalk from "chalk";
 import { Configuration } from "@nestbox-ai/admin";
 import { getAuthToken } from "./auth";
-
 export interface AuthResult {
-	authToken: {
+	authData: {
 		apiURL: string;
 		idToken: string;
 		refreshToken: string;
 		cliToken: string;
 		expiresAt: string;
+		email: string;
+		picture: string;
+		token: string;
 	};
 	configuration: Configuration;
 }
@@ -18,8 +20,8 @@ export interface AuthResult {
  * Returns authentication token and configured API client
  * Exits the process if authentication fails
  */
-export function setupAuthAndConfig(): AuthResult | null {
-	const authToken = getAuthToken();
+export async function setupAuthAndConfig(): Promise<AuthResult | null> {
+	const authToken = await getAuthToken();
 
 	if (!authToken) {
 		console.error(
@@ -32,13 +34,13 @@ export function setupAuthAndConfig(): AuthResult | null {
 		basePath: authToken.apiURL,
 		baseOptions: {
 			headers: {
-				Authorization: authToken.idToken,
+				Authorization: authToken.token,
 			},
 		},
 	});
 
 	return {
-		authToken,
+		authData: authToken,
 		configuration,
 	};
 }
@@ -50,7 +52,7 @@ export function setupAuthAndConfig(): AuthResult | null {
 export async function withAuth<T>(
 	callback: (authResult: AuthResult) => Promise<T>
 ): Promise<T | void> {
-	const authResult = setupAuthAndConfig();
+	const authResult = await setupAuthAndConfig();
 
 	if (!authResult) {
 		return;

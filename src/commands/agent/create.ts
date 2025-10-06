@@ -5,7 +5,7 @@ import { loadNestboxConfig } from "../../utils/agent";
 import {
 	createApis,
 	loadAgentFromYaml,
-	loadAllAgentNamesFromYaml, 
+	loadAllAgentNamesFromYaml,
 } from "./apiUtils";
 
 type CreateAgentOptions = {
@@ -16,7 +16,7 @@ type CreateAgentOptions = {
 	project?: string;
 	type?: string;
 	prefix?: string;
-	all?: boolean; 
+	all?: boolean;
 };
 
 type AgentCreateData = {
@@ -101,7 +101,7 @@ export function registerCreateCommand(agentCommand: Command) {
 		.command("create")
 		.description("Create an agent with direct arguments or YAML.")
 		.option("--agent <agent>", "Agent name to deploy")
-		.option("--all", "Deploy all agents defined in nestbox-agents.yaml") 
+		.option("--all", "Deploy all agents defined in nestbox-agents.yaml")
 		.option(
 			"--project <project>",
 			"Project ID (defaults to current project)"
@@ -116,7 +116,7 @@ export function registerCreateCommand(agentCommand: Command) {
 		.option("--inputSchema <inputSchema>", "Agent input schema")
 		.action(async (options): Promise<any> => {
 			try {
-				const apis = createApis();
+				const apis = await createApis();
 
 				// resolve project
 				const projectData = await resolveProject(apis.projectsApi, {

@@ -164,7 +164,7 @@ export function registerDeployCommand(agentCommand: Command) {
 		.option("--all", "Deploy all agents defined in nestbox-agents.yaml")
 		.action(async (options): Promise<any> => {
 			try {
-				let apis = createApis();
+				let apis = await createApis();
 
 				await withTokenRefresh(
 					async () => {
@@ -343,11 +343,9 @@ export function registerDeployCommand(agentCommand: Command) {
 								spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
 
 								const authToken = getAuthToken();
-								const baseUrl = authToken?.serverUrl?.endsWith(
-									"/"
-								)
-									? authToken.serverUrl.slice(0, -1)
-									: authToken?.serverUrl;
+								const baseUrl = authToken?.apiURL?.endsWith("/")
+									? authToken.apiURL.slice(0, -1)
+									: authToken?.apiURL;
 
 								const { default: FormData } = await import(
 									"form-data"
@@ -492,8 +490,8 @@ export function registerDeployCommand(agentCommand: Command) {
 							}
 						}
 					},
-					() => {
-						apis = createApis();
+					async () => {
+						apis = await createApis();
 					}
 				);
 			} catch (error: any) {

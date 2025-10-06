@@ -19,8 +19,8 @@ export interface ApiInstances {
 /**
  * Create API instances with current authentication using setupAuthAndConfig
  */
-export function createApis(): ApiInstances {
-	const authResult = setupAuthAndConfig();
+export async function createApis(): Promise<ApiInstances> {
+	const authResult = await setupAuthAndConfig();
 	if (!authResult) {
 		throw new Error("No authentication token found. Please log in first.");
 	}

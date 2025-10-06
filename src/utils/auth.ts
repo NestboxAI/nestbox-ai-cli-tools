@@ -3,6 +3,11 @@ import path from "path";
 import os from "os";
 import chalk from "chalk";
 import { UserCredentials } from "../types/auth";
+import {
+	Configuration,
+	OAuthLoginRequestDTOTypeEnum,
+	AuthApi,
+} from "@nestbox-ai/admin";
 
 // Config path
 const CONFIG_DIR = path.join(os.homedir(), ".config", ".nestbox");
@@ -15,15 +20,19 @@ if (!fs.existsSync(CONFIG_DIR)) {
 /**
  * Get authentication token for a specific domain
  */
-export function getAuthToken(domain?: string): {
+export async function getAuthToken(domain?: string): Promise<{
 	apiURL: string;
 	idToken: string;
 	refreshToken: string;
 	cliToken: string;
 	expiresAt: string;
-} | null {
+	email: string;
+	picture: string;
+	token: string;
+} | null> {
 	try {
 		const files = fs.readdirSync(CONFIG_DIR);
+		let configData;
 
 		if (!domain) {
 			// If no domain is provided, return the first token found
@@ -32,47 +41,62 @@ export function getAuthToken(domain?: string): {
 				return null;
 			}
 
-			const configData = JSON.parse(
+			configData = JSON.parse(
 				fs.readFileSync(path.join(CONFIG_DIR, tokenFiles[0])).toString()
 			);
-			return {
-				apiURL: configData.api_url,
-				idToken: configData.id_token,
-				refreshToken: configData.refresh_token,
-				cliToken: configData.cli_token,
-				expiresAt: configData.expires_at,
-			};
+		} else {
+			const domainFiles = files.filter(file =>
+				file.endsWith(`_${domain}.json`)
+			);
+
+			if (domainFiles.length === 0) {
+				return null;
+			}
+
+			// If multiple accounts, sort by last used and take the most recent
+			if (domainFiles.length > 1) {
+				const allConfigs = domainFiles.map(file => {
+					const data = JSON.parse(
+						fs.readFileSync(path.join(CONFIG_DIR, file)).toString()
+					) as UserCredentials;
+					return {
+						file,
+						data,
+					};
+				});
+
+				// Sort by last used, most recent first
+				configData = allConfigs[0].data;
+			} else {
+				// Just one file
+				const configFile = domainFiles[0];
+				configData = JSON.parse(
+					fs
+						.readFileSync(path.join(CONFIG_DIR, configFile))
+						.toString()
+				);
+			}
 		}
-		const domainFiles = files.filter(file =>
-			file.endsWith(`_${domain}.json`)
-		);
 
-		if (domainFiles.length === 0) {
-			return null;
-		}
+		const tokenConfig = new Configuration({
+			basePath: configData.apiURL,
+			accessToken: configData.cliToken,
+		});
 
-		// If multiple accounts, sort by last used and take the most recent
-		let configData: UserCredentials;
-
-		if (domainFiles.length > 1) {
-			const allConfigs = domainFiles.map(file => {
-				const data = JSON.parse(
-					fs.readFileSync(path.join(CONFIG_DIR, file)).toString()
-				) as UserCredentials;
-				return {
-					file,
-					data,
-				};
+		const authApi = new AuthApi(tokenConfig);
+		let token;
+		try {
+			const response = await authApi.authControllerOAuthLogin({
+				providerId: configData.cliToken,
+				type: OAuthLoginRequestDTOTypeEnum.Google,
+				email: configData.email,
+				profilePictureUrl: configData.picture || "",
 			});
 
-			// Sort by last used, most recent first
-			configData = allConfigs[0].data;
-		} else {
-			// Just one file
-			const configFile = domainFiles[0];
-			configData = JSON.parse(
-				fs.readFileSync(path.join(CONFIG_DIR, configFile)).toString()
-			);
+			token = response.data.token;
+		} catch (err) {
+			console.error("Error getting auth token:", err);
+			return null;
 		}
 
 		return {
@@ -81,6 +105,9 @@ export function getAuthToken(domain?: string): {
 			refreshToken: configData.refreshToken,
 			cliToken: configData.cliToken,
 			expiresAt: configData.expiresAt,
+			email: configData.email,
+			picture: configData.picture || "",
+			token: token,
 		};
 	} catch (error) {
 		console.error("Error getting auth token:", error);
