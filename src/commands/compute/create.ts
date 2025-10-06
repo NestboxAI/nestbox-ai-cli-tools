@@ -26,7 +26,7 @@ export function registerCreateCommand(computeCommand: Command): void {
 					return;
 				}
 
-				const { miscellaneousApi, projectsApi, authToken } = apis;
+				const { miscellaneousApi, projectsApi, authData } = apis;
 
 				// Resolve project using the shared utility
 				const project = await resolveProject(projectsApi, options);
@@ -200,11 +200,11 @@ export function registerCreateCommand(computeCommand: Command): void {
 						};
 
 						const createResponse = await axios.post(
-							`${authToken.serverUrl}/projects/${project.id}/instances`,
+							`${authData.apiURL}/projects/${project.id}/instances`,
 							createParams,
 							{
 								headers: {
-									Authorization: authToken.token,
+									Authorization: authData.token,
 								},
 							}
 						);

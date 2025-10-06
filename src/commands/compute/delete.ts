@@ -14,12 +14,12 @@ export function registerDeleteCommand(computeCommand: Command): void {
     .option('--force', 'Skip confirmation prompt')
     .action(async (options) => {
       try {
-        const apis = createComputeApis();
+        const apis = await createComputeApis();
         if (!apis) {
           return;
         }
 
-        const { machineInstanceApi, projectsApi, authToken } = apis;
+        const { machineInstanceApi, projectsApi, authData } = apis;
 
         // Resolve project using the shared utility
         const project = await resolveProject(projectsApi, options);
@@ -101,11 +101,11 @@ export function registerDeleteCommand(computeCommand: Command): void {
           
           try {
             await axios.delete(
-              `${authToken.serverUrl}/projects/${project.id}/instances`,
+              `${authData.apiURL}/projects/${project.id}/instances`,
               {
                 data: { ids: selectedInstances },
                 headers: {
-                  Authorization: authToken.token,
+                  Authorization: authData.token,
                 }
               }
             );

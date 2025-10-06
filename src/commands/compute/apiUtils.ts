@@ -9,24 +9,24 @@ export interface ComputeApiInstances {
 	machineInstanceApi: MachineInstancesApi;
 	miscellaneousApi: MiscellaneousApi;
 	projectsApi: ProjectsApi;
-	authToken: any;
+	authData: any;
 }
 
 /**
  * Create API instances for compute commands using setupAuthAndConfig
  */
 export async function createComputeApis(): Promise<ComputeApiInstances | null> {
-	const authResult = await setupAuthAndConfig();
+	const authResult = await await setupAuthAndConfig();
 	if (!authResult) {
 		return null;
 	}
 
-	const { authToken, configuration } = authResult;
+	const { authData, configuration } = authResult;
 
 	return {
 		machineInstanceApi: new MachineInstancesApi(configuration),
 		miscellaneousApi: new MiscellaneousApi(configuration),
 		projectsApi: new ProjectsApi(configuration),
-		authToken,
+		authData,
 	};
 }
