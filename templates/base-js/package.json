@@ -10,6 +10,6 @@
   "description": "",
   "dependencies": {
     "@nestbox-ai/functions": "^2.0.0",
-    "ollama": "^0.5.14"
+    "openai": "^6.5.0"
   }
 }

@@ -13,7 +13,7 @@
   "description": "",
   "dependencies": {
     "@nestbox-ai/functions": "^2.0.0",
-    "ollama": "^0.5.15"
+    "openai": "^6.5.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.31.0",
