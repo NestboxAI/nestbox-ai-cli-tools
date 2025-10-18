@@ -1,0 +1,12 @@
+agents:
+  - name: {{ agentNameInYaml }}
+    description: Our new agent {{ agentNameInYaml }} that uses the nestbox API
+    entry: {{agentName}}
+    inputSchema:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The content of the input as string
+          minLength: 10
+          maxLength: 5000

@@ -9,7 +9,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@nestbox-ai/functions": "^1.0.17",
+    "@nestbox-ai/functions": "^2.0.0",
     "ollama": "^0.5.14"
   }
 }

@@ -1,16 +1,29 @@
 import { AgentContext, AgentEvents, useAgent } from "@nestbox-ai/functions";
-import { Ollama } from "ollama";
+import OpenAI from 'openai';
 
-const ollama = new Ollama();
+const MODEL_NAME = 'openai/gpt-oss-20b';
+
+const client = new OpenAI({
+  baseURL: 'http://localhost:8000/v1',
+  apiKey: 'sk-xxxxxx'
+});
 
 export const {{agentName}} = useAgent(
   async (context: AgentContext, events: AgentEvents) => {
-    const response = await ollama.generate({
-      prompt: "Why is the sky blue?",
-      model: "gemma3:27b",
+    const response = await client.chat.completions.create({
+      model: MODEL_NAME,
+      messages: [
+        {
+          role: "user",
+          content: "Why is the sky blue?"
+        }
+      ]
     });
-    const result = response.response;
-
-    events.emitQueryCompleted({ data: result });
+    const result = response.choices[0].message.content;
+    if (!result) {
+      events.emitQueryFailed({ data: { error: 'No response from model' } });
+    } else {
+      events.emitQueryCompleted({ data: result });
+    }
   }
 );

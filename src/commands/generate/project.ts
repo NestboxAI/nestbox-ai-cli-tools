@@ -147,7 +147,7 @@ export function registerProjectCommand(generateCommand: Command): void {
 
 				try {
 					// Generate project using plop
-					await generateWithPlop(
+					const { agentNameInYaml } = await generateWithPlop(
 						selectedTemplate,
 						selectedLang,
 						folder,
@@ -170,7 +170,7 @@ export function registerProjectCommand(generateCommand: Command): void {
 					}
 					console.log(
 						chalk.yellow(
-							"  nestbox agent deploy --agent <agent-name> --instance <instance-name>"
+							`  nestbox agent deploy --agent ${agentNameInYaml} --instance <instance-name>`
 						)
 					);
 				} catch (error) {

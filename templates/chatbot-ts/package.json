@@ -12,7 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@nestbox-ai/functions": "^1.0.16",
+    "@nestbox-ai/functions": "^2.0.0",
     "ollama": "^0.5.15"
   },
   "devDependencies": {
