@@ -257,7 +257,7 @@ export function registerDeployCommand(agentCommand: Command) {
 								await apis.agentsApi.machineAgentControllerGetMachineAgentByProjectId(
 									projectData.id,
 									0,
-									10,
+									100,
 									data.type
 								);
 
