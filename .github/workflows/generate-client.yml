@@ -15,8 +15,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,43 +22,19 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup Node.js for npm Publish
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
+      - name: Upgrade npm (required for OIDC)
+        run: npm install -g npm@latest
 
       - name: Install dependencies
-        run: |
-          npm install --prefer-offline --no-audit
-          
-      - name: Install platform-specific dependencies
-        run: |
-          # Install Linux-specific Rollup binary for vitest
-          npm install @rollup/rollup-linux-x64-gnu --no-save || echo "Warning: Could not install platform-specific Rollup binary"
-        continue-on-error: true
-          
-      - name: Verify installation
-        run: |
-          npm list vitest --depth=0
-          node --version
-          npm --version
+        run: npm install --prefer-offline --no-audit
 
       - name: Run tests
-        run: |
-          echo "Running tests..."
-          echo "Node.js version: $(node --version)"
-          echo "NPM version: $(npm --version)"
-          echo "Checking if vitest is available..."
-          npx vitest --version || echo "Vitest not found via npx"
-          npm run test:ci
-          echo "All tests passed! ✅"
+        run: npm run test:ci
 
       - name: Update package version
         run: |
           new_version="1.0.${{ github.run_number }}"
           jq ".version = \"$new_version\"" package.json > temp.json && mv temp.json package.json
-          echo "Updated version to $new_version"  
 
       - name: Build project
         run: npm run build
