@@ -50,6 +50,7 @@ export function registerProjectCommand(generateCommand: Command): void {
 							choices: [
 								{ name: "TypeScript", value: "ts" },
 								{ name: "JavaScript", value: "js" },
+								{ name: "Python", value: "py" },
 							],
 							when: () => !selectedLang,
 						},
@@ -164,9 +165,17 @@ export function registerProjectCommand(generateCommand: Command): void {
 
 					console.log(chalk.green("\nNext steps:"));
 					console.log(chalk.yellow(`  cd ${folder}`));
-					console.log(chalk.yellow("  npm install"));
-					if (selectedLang === "ts") {
-						console.log(chalk.yellow("  npm run build"));
+					if (selectedLang === "py") {
+						console.log(
+							chalk.yellow(
+								"  pip install -r requirements.txt"
+							)
+						);
+					} else {	
+						console.log(chalk.yellow("  npm install"));
+						if (selectedLang === "ts") {
+							console.log(chalk.yellow("  npm run build"));
+						}
 					}
 					console.log(
 						chalk.yellow(

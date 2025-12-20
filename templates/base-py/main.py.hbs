@@ -1,0 +1,42 @@
+from nestbox_ai_functions import use_agent
+from openai import OpenAI
+
+MODEL_NAME = "openai/gpt-oss-20b"
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="sk-xxxxxx"
+)
+
+@use_agent
+async def {{agentName}}(context, events):
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Why is the sky blue?"
+                }
+            ],
+        )
+
+        result = response.choices[0].message.content if response.choices else None
+
+        if not result:
+            await events.emitQueryFailed({
+                "data": {
+                    "error": "No response from model"
+                }
+            })
+        else:
+            await events.emitQueryCompleted({
+                "data": result
+            })
+
+    except Exception as e:
+        await events.emitQueryFailed({
+            "data": {
+                "error": str(e)
+            }
+        })
