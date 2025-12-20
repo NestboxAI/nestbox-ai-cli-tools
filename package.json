@@ -4,7 +4,7 @@
   "description": "The cli tools that helps developers to build agents",
   "main": "dist/index.js",
   "bin": {
-    "nestbox": "./dist/index.js"
+    "nestbox": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
