@@ -17,6 +17,12 @@
     "coverage": "vitest run --coverage",
     "clean": "rimraf dist"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "GETTING_STARTED.md",
+    ".nestboxrc"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NestboxAI/nestbox-ai-cli-tools.git"
