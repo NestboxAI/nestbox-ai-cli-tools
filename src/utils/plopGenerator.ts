@@ -10,10 +10,18 @@ export interface TemplateConfig {
 }
 
 const kebabize = (str: string) =>
-  str.replace(
-    /[A-Z]+(?![a-z])|[A-Z]/g,
-    ($, ofs) => (ofs ? "-" : "") + $.toLowerCase()
-  );
+  str
+    // Convert underscores to hyphens
+    .replace(/_/g, "-")
+    // Insert hyphen before capitals (handles acronyms)
+    .replace(
+      /[A-Z]+(?![a-z])|[A-Z]/g,
+      (match, offset) => (offset ? "-" : "") + match.toLowerCase()
+    )
+    // Normalize multiple hyphens
+    .replace(/-+/g, "-")
+    // Trim hyphens
+    .replace(/^-|-$/g, "");
 
 /**
  * Generate project using plop.js templates
