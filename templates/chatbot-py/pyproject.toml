@@ -1,13 +1,8 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "app"
+description = "Nestbox Python Chatbot"
 version = "1.0.0"
-description = "Nestbox AI Python Agent"
-requires-python = ">=3.9"
-
+requires-python = ">=3.11"
 dependencies = [
     "nestbox-ai-functions>=2.0.3",
     "openai>=1.40.0",
@@ -15,5 +10,6 @@ dependencies = [
     "anyio>=4.0.0"
 ]
 
-[tool.setuptools]
-packages = ["."]
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
