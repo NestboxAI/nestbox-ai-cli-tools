@@ -144,6 +144,22 @@ export function createZipFromDirectory(
 	return tempZipFilePath;
 }
 
+export function getAgentExcludePatterns(config: any): string[] {
+	const configPatterns = config?.agent?.exclude || config?.agents?.exclude;
+	const defaultPatterns = ["node_modules"];
+
+	if (!Array.isArray(configPatterns)) {
+		return defaultPatterns;
+	}
+
+	const sanitizedPatterns = configPatterns.filter(
+		(pattern: unknown): pattern is string =>
+			typeof pattern === "string" && pattern.trim().length > 0
+	);
+
+	return [...new Set([...defaultPatterns, ...sanitizedPatterns])];
+}
+
 export interface TemplateInfo {
 	name: string;
 	description: string;
@@ -162,6 +178,7 @@ export function createNestboxConfig(
 	const config = {
 		agents: {
 			predeploy: ["rm -rf dist", "npm run lint", "npm run build"],
+			exclude: [".git", "node_modules"],
 		},
 	};
 
