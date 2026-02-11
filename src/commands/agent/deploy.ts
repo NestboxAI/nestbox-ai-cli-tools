@@ -338,9 +338,6 @@ export function registerDeployCommand(agentCommand: Command) {
 								spinner.text = `Creating zip archive from project root ${projectRoot}...`;
 								zipFilePath =
 									createZipFromDirectory(projectRoot);
-								spinner.text = `Directory zipped successfully to ${zipFilePath}`;
-
-								spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId}...`;
 
 								const authToken = getAuthToken();
 								const baseUrl = authToken?.serverUrl?.endsWith(
@@ -407,7 +404,7 @@ export function registerDeployCommand(agentCommand: Command) {
 
 								const endpoint = `/projects/${projectData.id}/agents/${agentId}`;
 
-								spinner.text = `Deploy ${name}...`;
+								spinner.text = `Deploying ${data.agentName.toLowerCase()} ${agentId} to instance ${instanceId} with file ${zipFilePath}...`;
 								const res = await axiosInstance.patch(
 									endpoint,
 									form
