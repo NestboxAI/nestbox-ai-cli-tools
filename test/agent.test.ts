@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Command } from "commander";
 import { registerAgentCommands } from "../src/commands/agent";
 
+vi.unmock("../src/utils/agent");
+import { getAgentExcludePatterns } from "../src/utils/agent";
+
 describe("Agent Commands", () => {
 	let program: Command;
 
@@ -150,5 +153,39 @@ describe("Agent Commands", () => {
 				expect(typeof cmd.action).toBe("function");
 			});
 		});
+	});
+});
+
+
+describe("Agent Config Utilities", () => {
+	it("should return default exclude patterns when config is missing", () => {
+		expect(getAgentExcludePatterns(null)).toEqual(["node_modules"]);
+	});
+
+	it("should merge config excludes with defaults and remove duplicates", () => {
+		const config = {
+			agents: {
+				exclude: [".git", "node_modules", "dist"],
+			},
+		};
+
+		expect(getAgentExcludePatterns(config)).toEqual([
+			"node_modules",
+			".git",
+			"dist",
+		]);
+	});
+
+	it("should ignore non-string exclude entries", () => {
+		const config = {
+			agents: {
+				exclude: [".git", "", 123, null],
+			},
+		};
+
+		expect(getAgentExcludePatterns(config)).toEqual([
+			"node_modules",
+			".git",
+		]);
 	});
 });

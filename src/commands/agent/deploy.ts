@@ -8,6 +8,7 @@ import ora from "ora";
 import { resolveProject } from "../../utils/project";
 import {
 	createZipFromDirectory,
+	getAgentExcludePatterns,
 	isTypeScriptProject,
 	loadNestboxConfig,
 	runPredeployScripts,
@@ -336,8 +337,12 @@ export function registerDeployCommand(agentCommand: Command) {
 								}
 
 								spinner.text = `Creating zip archive from project root ${projectRoot}...`;
-								zipFilePath =
-									createZipFromDirectory(projectRoot);
+								const excludePatterns =
+									getAgentExcludePatterns(config);
+								zipFilePath = createZipFromDirectory(
+									projectRoot,
+									excludePatterns
+								);
 
 								const authToken = getAuthToken();
 								const baseUrl = authToken?.serverUrl?.endsWith(
