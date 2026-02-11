@@ -487,7 +487,7 @@ export function registerDeployCommand(agentCommand: Command) {
 								);
 							} catch (error: any) {
 								spinner.fail(
-									`Failed to deploy ${data.agentName.toLowerCase()}`
+									`Failed to deploy ${data.agentName.toLowerCase()} with Error: ${error.message || "Unknown error"}`
 								);
 							}
 						}
