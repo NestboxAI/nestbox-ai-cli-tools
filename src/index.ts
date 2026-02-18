@@ -8,6 +8,7 @@ import { registerProjectCommands } from './commands/project';
 import { registerComputeProgram } from './commands/compute';
 import { registerDocumentCommands } from './commands/document';
 import { registerImageCommands } from './commands/image';
+import { registerDocProcCommands } from './commands/docProc';
 import { registerAgentCommands } from './commands/agent';
 import { registerGenerateCommands } from './commands/generate';
 
@@ -29,6 +30,7 @@ registerAgentCommands(program);
 registerGenerateCommands(program);
 registerDocumentCommands(program);
 registerImageCommands(program);
+registerDocProcCommands(program);
 
 // Parse command line arguments
 program.parse(process.argv);
