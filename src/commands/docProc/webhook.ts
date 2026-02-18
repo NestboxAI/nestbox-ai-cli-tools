@@ -49,7 +49,7 @@ export function registerDocProcWebhookCommands(docProcCommand: Command): void {
   webhookCommand
     .command('list')
     .description('List webhooks')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
@@ -69,7 +69,7 @@ export function registerDocProcWebhookCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const webhooks = data?.data?.webhooks || data?.webhooks || [];
+        const webhooks = data?.data || data || [];
         if (!webhooks.length) {
           console.log(chalk.yellow('No webhooks found.'));
           return;

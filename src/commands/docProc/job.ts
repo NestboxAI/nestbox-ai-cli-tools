@@ -16,7 +16,7 @@ export function registerDocProcJobCommands(docProcCommand: Command): void {
     .command('list')
     .description('List document-processing jobs')
     .option('--state <state>', 'Filter state')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
@@ -42,7 +42,7 @@ export function registerDocProcJobCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const jobs = data?.data?.jobs || data?.jobs || [];
+        const jobs = data?.data || data || [];
         if (!jobs.length) {
           console.log(chalk.yellow('No jobs found.'));
           return;

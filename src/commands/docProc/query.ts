@@ -96,7 +96,7 @@ export function registerDocProcQueryCommands(docProcCommand: Command): void {
   queryCommand
     .command('list')
     .description('List batch queries')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
@@ -116,7 +116,7 @@ export function registerDocProcQueryCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const queries = data?.data?.queries || data?.queries || [];
+        const queries = data?.data || data || [];
         if (!queries.length) {
           console.log(chalk.yellow('No queries found.'));
           return;

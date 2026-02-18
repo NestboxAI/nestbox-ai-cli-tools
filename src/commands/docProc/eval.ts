@@ -101,7 +101,7 @@ export function registerDocProcEvalCommands(docProcCommand: Command): void {
     .command('list')
     .description('List evaluations for a document')
     .requiredOption('--document <documentId>', 'Document ID')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
@@ -122,7 +122,7 @@ export function registerDocProcEvalCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const evals = data?.data?.evals || data?.evals || [];
+        const evals = data?.data || data || [];
         if (!evals.length) {
           console.log(chalk.yellow('No evaluations found.'));
           return;

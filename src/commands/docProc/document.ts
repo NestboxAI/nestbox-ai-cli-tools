@@ -56,7 +56,7 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
     .description('List processed documents')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--json', 'Output JSON')
     .action((options: any) => {
@@ -64,7 +64,6 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
         const apis = createDocProcApis();
         if (!apis) return;
         const context = await resolveDocProcContext(apis, options);
-
         const response = await apis.documentProcessingApi.documentProcessingControllerListDocuments(
           context.projectId,
           context.instanceId,
@@ -74,7 +73,7 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const documents = data?.data?.documents || data?.documents || [];
+        const documents = data?.data || data || [];
         if (!documents.length) {
           console.log(chalk.yellow('No documents found.'));
           return;

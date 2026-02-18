@@ -114,7 +114,7 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
     .description('List processing profiles')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
-    .option('--page <page>', 'Page number', '0')
+    .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
     .option('--json', 'Output JSON')
     .action((options: { project?: string; instance?: string; page: string; limit: string; json?: boolean }) => {
@@ -132,7 +132,7 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
         const data = getResponseData(response);
         if (maybePrintJson(data, options.json)) return;
 
-        const profiles = data?.data?.profiles || data?.profiles || [];
+        const profiles = data?.data || data || [];
         if (!profiles.length) {
           console.log(chalk.yellow('No profiles found.'));
           return;
