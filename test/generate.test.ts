@@ -112,14 +112,14 @@ describe('Generate Commands', () => {
       expect(longs).toContain('--maxIterations');
     });
 
-    it('should default model to "claude-opus-4-6"', () => {
+    it('should default model to "claude-sonnet-4-6"', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
       const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
       const modelOption = docProcCommand?.options.find(o => o.long === '--model');
 
-      expect(modelOption?.defaultValue).toBe('claude-opus-4-6');
+      expect(modelOption?.defaultValue).toBe('claude-sonnet-4-6');
     });
 
     it('should default maxIterations to "8"', () => {

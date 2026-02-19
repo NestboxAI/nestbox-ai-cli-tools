@@ -35,7 +35,7 @@ interface ValidationResult {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const AGENTS_DIR = __dirname;
-const DEFAULT_MODEL = 'claude-opus-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_MAX_ITERATIONS = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -184,7 +184,19 @@ export async function runDocProcAgent(options: DocProcAgentOptions): Promise<Doc
     return `Unknown tool: ${name}`;
   }
 
-  const systemPrompt = buildSystemPrompt();
+  // Build the system prompt once and mark it for caching.
+  // On iteration 1 the prompt is written to the cache (normal price).
+  // On iterations 2+ the 20k-token system prompt is read from cache at
+  // 10% of the normal input token price — the biggest cost lever here.
+  const systemPromptText = buildSystemPrompt();
+  const systemPrompt: Anthropic.TextBlockParam[] = [
+    {
+      type: 'text',
+      text: systemPromptText,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
+
   const messages: Anthropic.MessageParam[] = [
     {
       role: 'user',
@@ -203,20 +215,17 @@ export async function runDocProcAgent(options: DocProcAgentOptions): Promise<Doc
       max_tokens: 8096,
       system: systemPrompt,
       tools: TOOLS,
+      // Force Claude to call a tool every turn — prevents it from
+      // replying with plain text and exiting the loop prematurely.
+      tool_choice: { type: 'any' },
       messages,
     });
 
     // Append assistant turn
     messages.push({ role: 'assistant', content: response.content });
 
-    // Check stop reason
-    if (response.stop_reason === 'end_turn') {
-      onProgress('Agent finished (end_turn without calling finish tool).');
-      break;
-    }
-
     if (response.stop_reason !== 'tool_use') {
-      onProgress(`Agent stopped: ${response.stop_reason}`);
+      onProgress(`Agent stopped unexpectedly: ${response.stop_reason}`);
       break;
     }
 

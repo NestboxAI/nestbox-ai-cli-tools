@@ -26,7 +26,7 @@ export function registerDocProcGenerateCommand(generateCommand: Command): void {
     .requiredOption('-f, --file <path>', 'Path to the instructions Markdown file')
     .requiredOption('-o, --output <dir>', 'Output directory for the generated files')
     .requiredOption('--anthropicApiKey <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
-    .option('--model <model>', 'Claude model ID', 'claude-opus-4-6')
+    .option('--model <model>', 'Claude model ID', 'claude-sonnet-4-6')
     .option('--maxIterations <n>', 'Maximum agent iterations', '8')
     .action(async (options: DocProcGenerateOptions) => {
       // ── Resolve API key (flag takes priority over env var) ─────────────────
@@ -79,29 +79,35 @@ export function registerDocProcGenerateCommand(generateCommand: Command): void {
 
         spinner.stop();
 
-        // ── Write output files ───────────────────────────────────────────────
-        if (result.configYaml) {
-          fs.writeFileSync(configOut, result.configYaml, 'utf8');
-        }
-        if (result.evalYaml) {
-          fs.writeFileSync(evalOut, result.evalYaml, 'utf8');
-        }
+        // ── Write output files (always write whatever was produced) ──────────
+        const configWritten = result.configYaml.trim().length > 0;
+        const evalWritten   = result.evalYaml.trim().length > 0;
+
+        if (configWritten) fs.writeFileSync(configOut, result.configYaml, 'utf8');
+        if (evalWritten)   fs.writeFileSync(evalOut,   result.evalYaml,   'utf8');
 
         // ── Summary ──────────────────────────────────────────────────────────
         console.log(chalk.bold('Results'));
-        console.log(
-          `  config.yaml  ${result.configValid ? chalk.green('✓ valid') : chalk.yellow('⚠ not validated')}  →  ${configOut}`,
-        );
-        console.log(
-          `  eval.yaml    ${result.evalValid   ? chalk.green('✓ valid') : chalk.yellow('⚠ not validated')}  →  ${evalOut}`,
-        );
+
+        if (configWritten) {
+          const status = result.configValid ? chalk.green('✓ valid') : chalk.yellow('⚠ invalid');
+          console.log(`  config.yaml  ${status}  →  ${configOut}`);
+        } else {
+          console.log(`  config.yaml  ${chalk.red('✗ not generated')}`);
+        }
+
+        if (evalWritten) {
+          const status = result.evalValid ? chalk.green('✓ valid') : chalk.yellow('⚠ invalid');
+          console.log(`  eval.yaml    ${status}  →  ${evalOut}`);
+        } else {
+          console.log(`  eval.yaml    ${chalk.red('✗ not generated')}`);
+        }
+
         console.log(chalk.dim(`\n  Completed in ${result.iterations} iteration(s).`));
 
-        if (!result.configValid || !result.evalValid) {
-          console.log(
-            chalk.yellow('\nWarning: one or more files may have validation issues.') +
-            chalk.dim(' Review the output files and fix manually if needed.'),
-          );
+        const allDone = configWritten && evalWritten && result.configValid && result.evalValid;
+        if (!allDone) {
+          console.log(chalk.yellow('\nWarning: one or more files were not generated or have validation issues.'));
           process.exit(1);
         }
 
