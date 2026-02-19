@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc",
+    "copy-agent-assets": "mkdir -p dist/agents/docProc && cp src/agents/docProc/*.md src/agents/docProc/*.yaml dist/agents/docProc/",
+    "build": "tsc && npm run copy-agent-assets",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -54,6 +55,7 @@
     "vitest": "^1.1.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.77.0",
     "@nestbox-ai/admin": "^1.0.67",
     "@types/js-yaml": "^4.0.9",
     "adm-zip": "^0.5.16",

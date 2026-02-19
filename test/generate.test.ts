@@ -62,6 +62,74 @@ describe('Generate Commands', () => {
       const subCommandNames = subCommands.map(cmd => cmd.name());
 
       expect(subCommandNames).toContain('project');
+      expect(subCommandNames).toContain('doc-proc');
+    });
+  });
+
+  describe('generate doc-proc subcommand', () => {
+    it('should register the doc-proc subcommand', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+
+      expect(docProcCommand).toBeDefined();
+    });
+
+    it('should have the correct description', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+
+      expect(docProcCommand?.description()).toBe(
+        'Generate a document pipeline config.yaml and eval.yaml from an instructions file using Claude AI',
+      );
+    });
+
+    it('should have required options: --file, --output, --anthropicApiKey', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const options = docProcCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
+      expect(longs).toContain('--file');
+      expect(longs).toContain('--output');
+      expect(longs).toContain('--anthropicApiKey');
+    });
+
+    it('should have optional options: --model, --maxIterations', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const options = docProcCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
+      expect(longs).toContain('--model');
+      expect(longs).toContain('--maxIterations');
+    });
+
+    it('should default model to "claude-opus-4-6"', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const modelOption = docProcCommand?.options.find(o => o.long === '--model');
+
+      expect(modelOption?.defaultValue).toBe('claude-opus-4-6');
+    });
+
+    it('should default maxIterations to "8"', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const iterOption = docProcCommand?.options.find(o => o.long === '--maxIterations');
+
+      expect(iterOption?.defaultValue).toBe('8');
     });
   });
 });

@@ -1,0 +1,248 @@
+# JSON Schema for evaluation test case files
+# This schema defines the structure of YAML files used for GraphRAG evaluation
+# Used by eval-runner.ts to validate test case files
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "Evaluation Test Cases"
+description: "Schema for nest-doc-processing-cli evaluation test case YAML files"
+type: object
+additionalProperties: false
+
+# At least one of basic_search, local_search, or global_search must be present
+anyOf:
+  - required: [basic_search]
+  - required: [local_search]
+  - required: [global_search]
+
+properties:
+  eval_params:
+    type: object
+    description: "Optional query parameters that apply to all test cases in each search mode"
+    additionalProperties: false
+    properties:
+      basic_search:
+        type: object
+        description: "Parameters for all basic search queries"
+        additionalProperties: false
+        properties:
+          k:
+            type: integer
+            minimum: 1
+            maximum: 100
+            description: "Number of text units to retrieve"
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            description: "LLM temperature"
+          max_tokens:
+            type: integer
+            minimum: 1
+            maximum: 16000
+            description: "Maximum response tokens"
+      local_search:
+        type: object
+        description: "Parameters for all local search queries"
+        additionalProperties: false
+        properties:
+          text_unit_prop:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: "Text unit proportion"
+          community_prop:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: "Community proportion"
+          conversation_history_max_turns:
+            type: integer
+            minimum: 0
+            maximum: 20
+            description: "Max conversation turns"
+          top_k_entities:
+            type: integer
+            minimum: 1
+            maximum: 100
+            description: "Top k entities"
+          top_k_relationships:
+            type: integer
+            minimum: 1
+            maximum: 100
+            description: "Top k relationships"
+          max_context_tokens:
+            type: integer
+            minimum: 1000
+            maximum: 128000
+            description: "Max context tokens"
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            description: "LLM temperature"
+          max_tokens:
+            type: integer
+            minimum: 1
+            maximum: 16000
+            description: "Maximum response tokens"
+      global_search:
+        type: object
+        description: "Parameters for all global search queries"
+        additionalProperties: false
+        properties:
+          max_context_tokens:
+            type: integer
+            minimum: 1000
+            maximum: 128000
+            description: "Max context tokens"
+          data_max_tokens:
+            type: integer
+            minimum: 1000
+            maximum: 128000
+            description: "Max data tokens"
+          map_max_length:
+            type: integer
+            minimum: 100
+            maximum: 10000
+            description: "Map phase max length"
+          reduce_max_length:
+            type: integer
+            minimum: 100
+            maximum: 10000
+            description: "Reduce phase max length"
+          dynamic_search_threshold:
+            type: integer
+            minimum: 0
+            maximum: 10
+            description: "Rating threshold"
+          dynamic_search_keep_parent:
+            type: boolean
+            description: "Keep parent community"
+          dynamic_search_num_repeats:
+            type: integer
+            minimum: 0
+            maximum: 10
+            description: "Rating repeats"
+          dynamic_search_use_summary:
+            type: boolean
+            description: "Use community summary"
+          dynamic_search_max_level:
+            type: integer
+            minimum: 0
+            maximum: 10
+            description: "Max hierarchy level"
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            description: "LLM temperature"
+          max_tokens:
+            type: integer
+            minimum: 1
+            maximum: 16000
+            description: "Maximum response tokens"
+
+  basic_search:
+    type: array
+    description: "Test cases for simple vector similarity search queries"
+    minItems: 1
+    items:
+      type: object
+      required:
+        - question
+        - expected_answer
+        - bad_answer
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          description: "The question to ask GraphRAG (simple factual queries)"
+          minLength: 1
+          examples:
+            - "What is mentioned about parking?"
+            - "Are pets allowed?"
+            - "What is the security deposit?"
+        expected_answer:
+          type: string
+          description: "The expected correct answer (for similarity comparison)"
+          minLength: 1
+          examples:
+            - "The property includes one assigned parking space in the garage."
+            - "Small pets under 20 lbs are allowed with a $300 deposit."
+        bad_answer:
+          type: string
+          description: "A bad/wrong answer (for negative similarity comparison)"
+          minLength: 1
+          examples:
+            - "No parking information is available."
+            - "The document does not mention pets."
+
+  local_search:
+    type: array
+    description: "Test cases for entity-focused local search queries"
+    minItems: 1
+    items:
+      type: object
+      required:
+        - question
+        - expected_answer
+        - bad_answer
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          description: "The question to ask GraphRAG"
+          minLength: 1
+          examples:
+            - "What is the monthly rent amount?"
+            - "What are the payment terms?"
+            - "Who is the landlord?"
+        expected_answer:
+          type: string
+          description: "The expected correct answer (for similarity comparison)"
+          minLength: 1
+          examples:
+            - "The monthly rent is $2,500, payable on the first of each month."
+            - "Rent is due on the 1st of each month, with a 5-day grace period."
+        bad_answer:
+          type: string
+          description: "A bad/wrong answer (for negative similarity comparison)"
+          minLength: 1
+          examples:
+            - "I don't know what the rent is."
+            - "Payment is required monthly."
+
+  global_search:
+    type: array
+    description: "Test cases for community-based global search queries (summaries)"
+    minItems: 1
+    items:
+      type: object
+      required:
+        - question
+        - expected_answer
+        - bad_answer
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          description: "The question to ask GraphRAG (typically asking for summaries)"
+          minLength: 1
+          examples:
+            - "Summarize all tenant obligations in the document."
+            - "What are the key themes and entities discussed in this document?"
+            - "What are all the financial terms mentioned?"
+        expected_answer:
+          type: string
+          description: "The expected correct answer (for similarity comparison)"
+          minLength: 1
+          examples:
+            - "Tenants must pay rent on time, maintain the premises, report damages within 24 hours, and follow all building rules."
+            - "The document discusses rental terms, tenant and landlord obligations, payment schedules, and termination conditions."
+        bad_answer:
+          type: string
+          description: "A bad/wrong answer (for negative similarity comparison)"
+          minLength: 1
+          examples:
+            - "The tenant has some responsibilities."
+            - "This is a legal document."

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerProjectCommand } from "./generate/project";
+import { registerDocProcGenerateCommand } from "./generate/docProc";
 
 /**
  * Register all generate-related commands
@@ -12,4 +13,5 @@ export function registerGenerateCommands(program: Command): void {
 
   // Register all subcommands
   registerProjectCommand(generateCommand);
+  registerDocProcGenerateCommand(generateCommand);
 }

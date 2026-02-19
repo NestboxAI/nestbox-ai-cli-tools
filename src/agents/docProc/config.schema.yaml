@@ -1,0 +1,564 @@
+# JSON Schema for config.yaml validation
+# This schema defines the structure of user configuration files
+# Used by ConfigManager.loadFromFile() to validate config.yaml files
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: "Document Pipeline Configuration"
+description: "Schema for nest-doc-processing-cli config.yaml files"
+type: object
+required:
+  - name
+additionalProperties: false
+
+properties:
+  name:
+    type: string
+    description: "Human-readable name for this configuration"
+    minLength: 1
+
+  description:
+    type: string
+    description: "Optional description of the configuration purpose"
+
+  docling:
+    type: object
+    description: "IBM Docling document extraction settings"
+    additionalProperties: false
+    properties:
+      layout:
+        type: object
+        additionalProperties: false
+        properties:
+          model:
+            type: string
+            description: "Layout model for document structure detection"
+            enum:
+              - docling-layout-heron
+              - docling-layout-heron-101
+              - docling-layout-egret-medium
+              - docling-layout-egret-large
+              - docling-layout-egret-xlarge
+            default: docling-layout-egret-large
+          createOrphanClusters:
+            type: boolean
+            description: "Create clusters for orphan elements"
+            default: true
+          keepEmptyClusters:
+            type: boolean
+            description: "Keep empty clusters in output"
+            default: true
+
+      ocr:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable OCR for scanned documents"
+            default: true
+          engine:
+            type: string
+            description: "OCR engine to use"
+            enum: [rapidocr, tesseract, easyocr, mac]
+            default: rapidocr
+          backend:
+            type: string
+            description: "Computation backend"
+            enum: [torch, onnx, cpu]
+            default: torch
+          languages:
+            type: array
+            items:
+              type: string
+            description: "Languages to recognize"
+            default: [en]
+          textScore:
+            type: number
+            description: "Minimum confidence score for text detection"
+            minimum: 0
+            maximum: 1
+            default: 0.5
+          forceFullPageOcr:
+            type: boolean
+            description: "Force OCR on entire page even if text is detected"
+            default: true
+
+      tables:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable table extraction"
+            default: true
+          mode:
+            type: string
+            description: "Table extraction mode"
+            enum: [fast, accurate]
+            default: accurate
+          doCellMatching:
+            type: boolean
+            description: "Match cells to table structure"
+            default: true
+
+      pictures:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable picture extraction"
+            default: true
+          enableClassification:
+            type: boolean
+            description: "Classify picture types (chart, diagram, photo, etc.)"
+            default: true
+          enableDescription:
+            type: boolean
+            description: "Generate AI descriptions for pictures"
+            default: true
+          descriptionProvider:
+            type: string
+            description: "Provider for picture descriptions"
+            enum: [openai, local]
+            default: openai
+          descriptionModel:
+            type: string
+            description: "Model for generating picture descriptions"
+            default: gpt-4o
+          descriptionPrompt:
+            type: string
+            description: "Custom prompt for picture description generation"
+          imagesScale:
+            type: number
+            description: "Scale factor for image extraction"
+            minimum: 0.1
+            maximum: 4.0
+            default: 2.0
+
+      accelerator:
+        type: object
+        additionalProperties: false
+        properties:
+          device:
+            type: string
+            description: "Compute device"
+            enum: [auto, cpu, cuda, mps]
+            default: auto
+          numThreads:
+            type: integer
+            description: "Number of CPU threads"
+            minimum: 1
+            maximum: 32
+            default: 4
+          cudaUseFlashAttention2:
+            type: boolean
+            description: "Use Flash Attention 2 on CUDA"
+            default: false
+
+      limits:
+        type: object
+        additionalProperties: false
+        properties:
+          documentTimeout:
+            type: integer
+            description: "Maximum processing time per document (seconds)"
+            minimum: 60
+            maximum: 3600
+            default: 300
+          maxPages:
+            type: integer
+            description: "Maximum pages to process (optional)"
+            minimum: 1
+          maxFileSize:
+            type: integer
+            description: "Maximum file size in bytes (optional)"
+            minimum: 1
+
+  chunking:
+    type: object
+    description: "Document chunking settings for RAG"
+    additionalProperties: false
+    properties:
+      strategy:
+        type: string
+        description: "Chunking strategy"
+        enum: [docling_hybrid, sentence, paragraph, fixed]
+        default: docling_hybrid
+      maxTokens:
+        type: integer
+        description: "Maximum tokens per chunk"
+        minimum: 100
+        maximum: 8000
+        default: 1200
+      overlapTokens:
+        type: integer
+        description: "Overlap tokens between chunks"
+        minimum: 0
+        maximum: 1000
+        default: 200
+      tokenizer:
+        type: string
+        description: "Tokenizer for counting tokens"
+        default: cl100k_base
+      mergePeers:
+        type: boolean
+        description: "Merge small sibling chunks"
+        default: true
+      contextualize:
+        type: boolean
+        description: "Add contextual headers to chunks"
+        default: true
+
+      output:
+        type: object
+        additionalProperties: false
+        properties:
+          format:
+            type: string
+            description: "Output format for chunks"
+            enum: [json, text_files]
+            default: text_files
+          includeMetadataHeader:
+            type: boolean
+            description: "Include metadata in chunk headers"
+            default: true
+
+      metadata:
+        type: object
+        additionalProperties: false
+        properties:
+          includeHeadings:
+            type: boolean
+            description: "Include heading hierarchy in metadata"
+            default: true
+          includePageNumbers:
+            type: boolean
+            description: "Include page numbers in metadata"
+            default: true
+          includePosition:
+            type: boolean
+            description: "Include position coordinates"
+            default: true
+          includeSource:
+            type: boolean
+            description: "Include source file information"
+            default: true
+
+  graphrag:
+    type: object
+    description: "Microsoft GraphRAG knowledge graph settings"
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        description: "Enable GraphRAG indexing"
+        default: true
+
+      models:
+        type: object
+        additionalProperties: false
+        properties:
+          chatModel:
+            type: string
+            description: "LLM for entity extraction and summarization"
+            default: gpt-4o-mini
+          embeddingModel:
+            type: string
+            description: "Model for text embeddings"
+            default: text-embedding-3-large
+          temperature:
+            type: number
+            description: "LLM temperature"
+            minimum: 0
+            maximum: 2
+            default: 0
+          maxTokens:
+            type: integer
+            description: "Maximum tokens for LLM responses"
+            minimum: 100
+            maximum: 32000
+            default: 4096
+          embeddingBatchSize:
+            type: integer
+            description: "Batch size for embedding requests"
+            minimum: 1
+            maximum: 100
+            default: 16
+
+      entityExtraction:
+        type: object
+        additionalProperties: false
+        properties:
+          entityTypes:
+            type: array
+            items:
+              type: string
+            description: "Types of entities to extract"
+            default:
+              - PERSON
+              - ORGANIZATION
+              - LOCATION
+              - DATE
+              - MONEY
+              - PROPERTY
+              - CLAUSE
+              - OBLIGATION
+              - TERM
+              - CONDITION
+          maxGleanings:
+            type: integer
+            description: "Number of extraction passes"
+            minimum: 0
+            maximum: 5
+            default: 1
+          maxEntitiesPerChunk:
+            type: integer
+            description: "Maximum entities per text chunk"
+            minimum: 1
+            maximum: 100
+            default: 20
+          confidenceThreshold:
+            type: number
+            description: "Minimum confidence for entity extraction"
+            minimum: 0
+            maximum: 1
+            default: 0.7
+          prompt:
+            type: string
+            description: "Custom prompt for entity extraction"
+
+      summarizeDescriptions:
+        type: object
+        additionalProperties: false
+        properties:
+          maxLength:
+            type: integer
+            description: "Maximum length for entity descriptions"
+            minimum: 100
+            maximum: 2000
+            default: 500
+          maxInputLength:
+            type: integer
+            description: "Maximum input length for summarization"
+            minimum: 1000
+            maximum: 32000
+            default: 8000
+          prompt:
+            type: string
+            description: "Custom prompt for description summarization"
+
+      claimExtraction:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable claim/obligation extraction"
+            default: true
+          description:
+            type: string
+            description: "Description of claim types to extract"
+          maxGleanings:
+            type: integer
+            description: "Number of extraction passes"
+            minimum: 0
+            maximum: 5
+            default: 1
+          prompt:
+            type: string
+            description: "Custom prompt for claim extraction"
+
+      embeddings:
+        type: object
+        additionalProperties: false
+        properties:
+          model:
+            type: string
+            description: "Embedding model"
+            default: text-embedding-3-large
+          dimensions:
+            type: integer
+            description: "Embedding dimensions"
+            minimum: 256
+            maximum: 4096
+            default: 3072
+          batchSize:
+            type: integer
+            description: "Batch size for embedding requests"
+            minimum: 1
+            maximum: 1000
+            default: 100
+
+      communities:
+        type: object
+        additionalProperties: false
+        properties:
+          algorithm:
+            type: string
+            description: "Community detection algorithm"
+            enum: [leiden, louvain]
+            default: leiden
+          resolution:
+            type: number
+            description: "Resolution parameter for community detection"
+            minimum: 0.1
+            maximum: 10.0
+            default: 1.0
+          minCommunitySize:
+            type: integer
+            description: "Minimum community size"
+            minimum: 2
+            maximum: 50
+            default: 3
+          maxLevels:
+            type: integer
+            description: "Maximum hierarchy levels"
+            minimum: 1
+            maximum: 10
+            default: 3
+
+      clusterGraph:
+        type: object
+        additionalProperties: false
+        properties:
+          maxClusterSize:
+            type: integer
+            description: "Maximum cluster size"
+            minimum: 2
+            maximum: 100
+            default: 10
+          useLcc:
+            type: boolean
+            description: "Use largest connected component"
+            default: true
+          seed:
+            type: integer
+            description: "Random seed for reproducibility"
+            default: 42
+
+      cache:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable caching"
+            default: true
+          type:
+            type: string
+            description: "Cache type"
+            enum: [file, memory, none]
+            default: file
+
+      communityReports:
+        type: object
+        additionalProperties: false
+        properties:
+          maxLength:
+            type: integer
+            description: "Maximum length for community reports"
+            minimum: 500
+            maximum: 10000
+            default: 2000
+          maxInputLength:
+            type: integer
+            description: "Maximum input length for report generation"
+            minimum: 1000
+            maximum: 32000
+            default: 8000
+          prompt:
+            type: string
+            description: "Custom prompt for community report generation"
+
+      localSearch:
+        type: object
+        additionalProperties: false
+        properties:
+          topKEntities:
+            type: integer
+            description: "Number of top entities to retrieve"
+            minimum: 1
+            maximum: 100
+            default: 10
+          topKRelationships:
+            type: integer
+            description: "Number of top relationships to retrieve"
+            minimum: 1
+            maximum: 100
+            default: 10
+          topKCommunityReports:
+            type: integer
+            description: "Number of top community reports"
+            minimum: 1
+            maximum: 50
+            default: 5
+          maxContextTokens:
+            type: integer
+            description: "Maximum context tokens for local search"
+            minimum: 1000
+            maximum: 128000
+            default: 12000
+          prompt:
+            type: string
+            description: "Custom prompt for local search"
+
+      globalSearch:
+        type: object
+        additionalProperties: false
+        properties:
+          maxCommunities:
+            type: integer
+            description: "Maximum communities to include"
+            minimum: 1
+            maximum: 100
+            default: 10
+          mapMaxTokens:
+            type: integer
+            description: "Maximum tokens for map phase"
+            minimum: 1000
+            maximum: 32000
+            default: 4000
+          reduceMaxTokens:
+            type: integer
+            description: "Maximum tokens for reduce phase"
+            minimum: 1000
+            maximum: 32000
+            default: 8000
+          mapPrompt:
+            type: string
+            description: "Custom prompt for map phase"
+          reducePrompt:
+            type: string
+            description: "Custom prompt for reduce phase"
+          knowledgePrompt:
+            type: string
+            description: "Custom knowledge prompt"
+
+      driftSearch:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable DRIFT search"
+            default: false
+          prompt:
+            type: string
+            description: "Custom prompt for DRIFT search"
+          reducePrompt:
+            type: string
+            description: "Custom reduce prompt for DRIFT search"
+
+  apiKeys:
+    type: object
+    description: "API keys for external services"
+    additionalProperties: false
+    properties:
+      openai:
+        type: string
+        description: "OpenAI API key (can use ${OPENAI_API_KEY} for env var)"
+      baseUrl:
+        type: string
+        format: uri
+        description: "Base URL for OpenAI-compatible API endpoint"
