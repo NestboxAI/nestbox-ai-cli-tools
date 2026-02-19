@@ -873,6 +873,29 @@ graphrag:
 
 ---
 
+### Embeddings
+
+The `embeddings` section controls how entity and community texts are vectorised for similarity search. It does **not** have an `enabled` field — to disable embeddings, omit the section entirely.
+
+```yaml
+graphrag:
+  embeddings:
+    model: text-embedding-3-large   # embedding model (matches graphrag.models.embeddingModel)
+    dimensions: 3072                # vector dimensions (3072 for text-embedding-3-large)
+    batchSize: 100                  # texts per API batch
+```
+
+Fields:
+- `model` — the embedding model name. Must match what `graphrag.models.embeddingModel` uses.
+  - `text-embedding-3-large` → set `dimensions: 3072` (default)
+  - `text-embedding-3-small` → set `dimensions: 1536`
+- `dimensions` — must match the model's output dimensions.
+- `batchSize` — number of text chunks sent per embedding request. Default `100`.
+
+> **Do not write `enabled: true` or any other key here.** The schema only allows `model`, `dimensions`, and `batchSize`.
+
+---
+
 ### Local Search
 
 Local search answers specific, entity-focused questions ("What is the rent?", "Who are the parties?").
