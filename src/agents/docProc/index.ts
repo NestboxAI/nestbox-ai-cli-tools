@@ -45,9 +45,13 @@ function readLocalFile(filename: string): string {
 }
 
 function validateYaml(content: string, schemaContent: string): ValidationResult {
+  // Replace ${ENV_VAR} references with a plain string so YAML parses cleanly
+  // and AJV treats them as valid string values.
+  const preprocessed = content.replace(/\$\{[^}]+\}/g, 'env-var-placeholder');
+
   let data: unknown;
   try {
-    data = yaml.load(content);
+    data = yaml.load(preprocessed);
   } catch (e: any) {
     return { valid: false, errors: [`YAML parse error: ${e.message}`] };
   }
@@ -60,6 +64,8 @@ function validateYaml(content: string, schemaContent: string): ValidationResult 
   }
 
   const ajv = new Ajv({ strict: false, allErrors: true });
+  // Suppress "unknown format 'uri' ignored" console warnings from AJV
+  ajv.addFormat('uri', () => true);
   const validate = ajv.compile(schema);
   const ok = validate(data);
 
