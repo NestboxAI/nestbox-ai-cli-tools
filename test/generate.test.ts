@@ -63,6 +63,7 @@ describe('Generate Commands', () => {
 
       expect(subCommandNames).toContain('project');
       expect(subCommandNames).toContain('doc-proc');
+      expect(subCommandNames).toContain('report-composer');
     });
   });
 
@@ -130,6 +131,89 @@ describe('Generate Commands', () => {
       const iterOption = docProcCommand?.options.find(o => o.long === '--maxIterations');
 
       expect(iterOption?.defaultValue).toBe('8');
+    });
+  });
+
+  describe('generate report-composer subcommand', () => {
+    it('should register the report-composer subcommand', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+
+      expect(reportComposerCommand).toBeDefined();
+    });
+
+    it('should have the correct description', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+
+      expect(reportComposerCommand?.description()).toBe(
+        'Generate a report composer report.yaml configuration from an instructions file using Claude AI',
+      );
+    });
+
+    it('should have required options: --file, --output, --anthropicApiKey', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const options = reportComposerCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
+      expect(longs).toContain('--file');
+      expect(longs).toContain('--output');
+      expect(longs).toContain('--anthropicApiKey');
+    });
+
+    it('should mark --file, --output, --anthropicApiKey as mandatory', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const options = reportComposerCommand?.options ?? [];
+
+      const fileOption = options.find(o => o.long === '--file');
+      const outputOption = options.find(o => o.long === '--output');
+      const keyOption = options.find(o => o.long === '--anthropicApiKey');
+
+      expect(fileOption?.mandatory).toBe(true);
+      expect(outputOption?.mandatory).toBe(true);
+      expect(keyOption?.mandatory).toBe(true);
+    });
+
+    it('should have optional options: --model, --maxIterations', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const options = reportComposerCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
+      expect(longs).toContain('--model');
+      expect(longs).toContain('--maxIterations');
+    });
+
+    it('should default model to "claude-sonnet-4-6"', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const modelOption = reportComposerCommand?.options.find(o => o.long === '--model');
+
+      expect(modelOption?.defaultValue).toBe('claude-sonnet-4-6');
+    });
+
+    it('should default maxIterations to "5"', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const iterOption = reportComposerCommand?.options.find(o => o.long === '--maxIterations');
+
+      expect(iterOption?.defaultValue).toBe('5');
     });
   });
 });

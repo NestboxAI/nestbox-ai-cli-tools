@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "copy-agent-assets": "mkdir -p dist/agents/docProc && cp src/agents/docProc/*.md src/agents/docProc/*.yaml dist/agents/docProc/",
+    "copy-agent-assets": "for d in docProc reportGenerator; do mkdir -p dist/agents/$d && cp src/agents/$d/*.md src/agents/$d/*.yaml dist/agents/$d/; done",
     "build": "tsc && npm run copy-agent-assets",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",

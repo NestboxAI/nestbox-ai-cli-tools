@@ -1,0 +1,905 @@
+"$schema": https://json-schema.org/draft/2020-12/schema
+"$id": https://github.com/nestbox-ai/report-generator/report-config.schema.yaml
+title: GraphRAG Report Configuration
+description: >-
+  Schema v2.2 for YAML-driven report generation using GraphRAG and LlamaIndex
+  ReAct Agent. Adds template pipes and document repository downloads.
+type: object
+required: [schema_version, report, docsets, llamaindex, computations, template]
+additionalProperties: false
+
+properties:
+  schema_version:
+    type: string
+    pattern: "^\\d+\\.\\d+(\\.\\d+)?$"
+    description: Semantic version of the config schema. Use '2.2' for current version.
+    examples: ["2.2", "2.2.0"]
+
+  report:
+    type: object
+    description: Report metadata - identifies and describes the report
+    required: [id, name]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[a-z0-9][a-z0-9_-]*[a-z0-9]$|^[a-z0-9]$"
+        description: Unique identifier for the report (lowercase, underscores/hyphens allowed)
+        examples: [shipwell_cfo_kpi_pack_25q4, quarterly_board_report]
+      name:
+        type: string
+        minLength: 1
+        description: Human-readable report name displayed in outputs
+        examples: ["Shipwell CFO KPI Pack", "Q4 2025 Board Report"]
+      description:
+        type: string
+        description: Detailed description of the report purpose and scope
+        examples: ["Quarterly financial KPI extraction from board meeting presentations."]
+      version:
+        type: string
+        description: Report version, typically tied to reporting period
+        examples: ["2025.Q4", v1.0]
+
+  context:
+    type: object
+    description: >-
+      Runtime context variables, policies, and system integration settings.
+      Variables can be referenced in prompts as {{context.variable_name}}
+    additionalProperties: true
+    properties:
+      company_name:
+        type: string
+        description: Company name for prompt substitution
+        examples: ["Shipwell, Inc."]
+      currency:
+        type: string
+        default: USD
+        description: Default currency for financial values
+        examples: [USD, EUR]
+      source_deck:
+        type: object
+        description: Primary source document metadata
+        additionalProperties: false
+        properties:
+          document_id:
+            type: string
+            description: Reference to document ID in docsets
+          title:
+            type: string
+            description: Human-readable title of the source
+      units_policy:
+        type: string
+        description: Policy for handling units and normalization
+        examples: ["Normalize all currency values to USD. Express large values in millions with 'M' suffix."]
+      answer_quality_policy:
+        type: object
+        description: Quality requirements for extracted answers
+        additionalProperties: false
+        properties:
+          numeric_requirements:
+            type: array
+            items: { type: string }
+            description: Requirements for numeric value extraction
+          labeling_requirements:
+            type: array
+            items: { type: string }
+            description: Requirements for labeling/citation
+      system_of_record_policy:
+        type: object
+        description: Policy for MCP system of record integration
+        additionalProperties: false
+        properties:
+          kpi_namespace:
+            type: string
+            description: Namespace for KPI storage
+            examples: [shipwell.board.25q4]
+          upsert_granularity:
+            type: string
+            enum: [metric_by_period, bulk]
+            description: Granularity of upsert operations
+          idempotency_key_template:
+            type: string
+            description: Template for generating idempotency keys
+            examples: ["{{namespace}}:{{metric_id}}:{{period}}"]
+      value_types:
+        type: array
+        items: { type: string }
+        description: Allowed value type labels
+        examples: [[currency, percentage, count, ratio]]
+
+  prompts:
+    type: object
+    description: >-
+      Custom named prompts that can be referenced throughout the config.
+      Define prompts here and reference them by name in llamaindex settings
+      or computation prompts.
+    additionalProperties:
+      type: string
+      minLength: 1
+      description: "Prompt text. Can contain {{variable}} placeholders."
+    examples:
+      - my_system_prompt: "You are a financial analyst extracting KPIs..."
+        custom_synthesis: "Synthesize the following results into a structured output..."
+        strict_citation_rules: "Every value MUST have a citation. Never leave citations empty..."
+
+  storage:
+    type: object
+    description: >-
+      Storage configuration for resolving document_id references.
+      Required when using document_id in docs instead of locator.
+    additionalProperties: false
+    required: [base_path]
+    properties:
+      base_path:
+        type: string
+        minLength: 1
+        description: Base path for resolving document_id references (relative to config file or absolute)
+        examples: [./documents, ../documents, /data/graphrag]
+      graphrag_subpath:
+        type: string
+        default: graphrag/output
+        description: Subpath within each document folder to the GraphRAG output
+        examples: [graphrag/output, output]
+
+  doc_repository:
+    type: object
+    description: >-
+      Document repository for automatic artifact downloads. When configured,
+      documents not found locally will be downloaded from the API and cached.
+    additionalProperties: false
+    required: [api_base_url, api_key]
+    properties:
+      api_base_url:
+        type: string
+        minLength: 1
+        description: Base URL of the document repository API
+        examples: ["http://130.211.209.186", "${DOC_REPO_URL}"]
+      api_key:
+        type: string
+        minLength: 1
+        description: "API key for authentication (supports ${ENV_VAR})"
+        examples: ["${DOC_REPO_API_KEY}"]
+      rotation:
+        type: integer
+        minimum: 1
+        default: 200
+        description: Maximum number of cached documents (FIFO eviction)
+
+  mcp:
+    type: array
+    description: Model Context Protocol (MCP) server endpoints for external system integration
+    items: { "$ref": "#/$defs/mcpEndpoint" }
+
+  docsets:
+    type: array
+    description: Named collections of documents for GraphRAG querying. Each docset groups related documents.
+    minItems: 1
+    items: { "$ref": "#/$defs/docset" }
+
+  llamaindex:
+    type: object
+    description: LlamaIndex ReAct agent configuration - single config for all agent operations
+    required: [model, api_key]
+    additionalProperties: false
+    properties:
+      model:
+        type: string
+        minLength: 1
+        description: Model identifier for agent operations
+        examples: [gpt-4o, gpt-4.1-mini, claude-3-5-sonnet]
+      base_url:
+        type: string
+        description: "Custom base URL for API calls (supports ${ENV_VAR})"
+        examples: ["${OPENAI_BASE_URL:-https://api.openai.com/v1}", "https://api.openai.com/v1"]
+      api_key:
+        type: string
+        minLength: 1
+        description: "API key (supports ${ENV_VAR} substitution)"
+        examples: ["${OPENAI_API_KEY}", "${LLAMAINDEX_API_KEY}"]
+      max_tool_calls:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+        description: Maximum tool calls per agent execution
+        examples: [18, 20]
+      tool_timeout_seconds:
+        type: integer
+        minimum: 1
+        maximum: 600
+        default: 120
+        description: Timeout for individual tool calls in seconds
+        examples: [120, 180]
+      system_prompt:
+        type: string
+        description: >-
+          Main system prompt for the ReAct agent. Defines the agent's role and behavior.
+          When omitted, uses default CFO-grade KPI extraction prompt.
+        examples: ["You are a CFO-grade KPI extraction analyst..."]
+      autonomous_search_guidance:
+        type: string
+        description: >-
+          Search strategy guidance for autonomous mode. Explains when to use
+          each search type (basic, local, global, drift). When omitted, uses default guidance.
+        examples: ["You have access to multiple GraphRAG search tools. Use basic_search for exact text values..."]
+      synthesis_prompt:
+        type: string
+        description: >-
+          Prompt template for synthesizing multiple subtask results into a final value.
+          Use {{subtask_results}} placeholder for subtask outputs and {{output_schema}}
+          for the expected structure.
+        examples: ["Synthesize these search results into a single structured response matching the schema..."]
+      validation_repair_prompt:
+        type: string
+        description: >-
+          Prompt template for repairing outputs that fail schema validation.
+          Use {{raw_response}}, {{validation_errors}}, and {{output_schema}} placeholders.
+        examples: ["The following response failed validation. Fix the errors and return valid JSON..."]
+      mcp_system_prompt:
+        type: string
+        description: System prompt for MCP integration agent. If not set, uses default MCP prompt.
+      guardrail_system_prompt:
+        type: string
+        description: Default system prompt for guardrail LLM-judge calls. Can be overridden per-guardrail.
+      json_extraction_prompt:
+        type: string
+        description: Prompt for LLM fallback when converting non-JSON agent responses to JSON.
+      max_agent_iterations:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 30
+        description: Maximum ReAct agent iterations before stopping.
+      max_repair_attempts:
+        type: integer
+        minimum: 1
+        maximum: 10
+        default: 2
+        description: Maximum schema validation repair attempts before failing.
+
+  computations:
+    type: object
+    description: Defines what values to extract. Fields produce single values, tables produce rows.
+    additionalProperties: false
+    properties:
+      fields:
+        type: array
+        description: "Single-value computations (e.g., Total ARR, Gross Margin)"
+        items: { "$ref": "#/$defs/fieldComputation" }
+      tables:
+        type: array
+        description: Tabular computations that produce multiple rows
+        items: { "$ref": "#/$defs/tableComputation" }
+
+  template:
+    type: object
+    description: "Output template configuration. Uses placeholders like {{field.id.property}} and {{table.id}}"
+    required: [content]
+    additionalProperties: false
+    properties:
+      format:
+        type: string
+        enum: [markdown]
+        description: Output format (currently only markdown supported)
+      sections:
+        type: object
+        description: Reusable template sections
+        additionalProperties: { type: string }
+      content:
+        type: string
+        minLength: 1
+        description: Main template content with placeholders for computed values
+
+  guardrails:
+    type: array
+    description: LLM-judge validation checks to run on computed outputs
+    items: { "$ref": "#/$defs/guardrail" }
+
+  execution:
+    "$ref": "#/$defs/executionConfig"
+    description: Execution settings for retries and output configuration
+
+"$defs":
+  document:
+    type: object
+    description: A reference to a document with GraphRAG output
+    required: [id]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        description: Unique document identifier
+        examples: [board_deck_pdf, financial_statements]
+      locator:
+        type: string
+        description: >-
+          Document location. Can be: a filesystem path to GraphRAG output,
+          'repo:doc-ID' to download from doc_repository, or a bare 'doc-ID'
+          to check local cache then download.
+        examples: [/data/graphrag/board_deck/output, "repo:doc-6b3c6cdf", doc-a850ad6f]
+      document_id:
+        type: string
+        description: "Legacy: Document folder ID under storage.base_path (deprecated, use locator)"
+        examples: [doc-a850ad6f]
+      description:
+        type: string
+        description: Human-readable description
+        examples: ["Q4 2025 Board Meeting Presentation"]
+      alias:
+        type: string
+        description: Short alias for referencing in prompts
+        examples: [q4_deck]
+
+  docset:
+    type: object
+    description: A named collection of documents that can be searched together
+    required: [id, docs]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        description: Unique docset identifier
+        examples: [shipwell_board_deck_25q4]
+      description:
+        type: string
+        description: Description of what this docset represents
+      api_key:
+        type: string
+        description: >-
+          API key for OpenAI used by GraphRAG search operations on this docset.
+          Supports environment variable substitution (e.g., ${OPENAI_API_KEY}).
+          If not set, falls back to the OPENAI_API_KEY environment variable.
+        examples: ["${OPENAI_API_KEY}"]
+      docs:
+        type: array
+        minItems: 1
+        items: { "$ref": "#/$defs/document" }
+        description: List of documents in this docset
+
+  mcpEndpoint:
+    type: object
+    description: Configuration for an MCP server endpoint
+    required: [id, url]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        description: Unique identifier for this MCP endpoint
+        examples: [system_of_record]
+      type:
+        type: string
+        enum: [http, streamable-http, sse, stdio]
+        default: http
+        description: MCP transport type
+        examples: [streamable-http]
+      url:
+        type: string
+        minLength: 1
+        description: "MCP server URL (supports ${ENV_VAR})"
+        examples: ["${SOR_MCP_URL}"]
+      headers:
+        type: object
+        description: HTTP headers for authentication
+        additionalProperties: { type: string }
+        examples: [{ Authorization: "Bearer ${SOR_MCP_TOKEN}" }]
+      timeout_seconds:
+        type: integer
+        minimum: 1
+        maximum: 300
+        default: 30
+        description: Request timeout in seconds
+      description:
+        type: string
+        description: "Description of this MCP endpoint's purpose"
+
+  basicSearchOptions:
+    type: object
+    description: Options for basic_search (embedding-based text retrieval)
+    additionalProperties: false
+    properties:
+      chat_model_id:
+        type: string
+        description: Model ID for chat completion
+        examples: [gpt-4o]
+      embedding_model_id:
+        type: string
+        default: text-embedding-3-large
+        description: Embedding model for semantic search
+        examples: [text-embedding-3-large, text-embedding-3-small]
+      prompt:
+        type: [string, "null"]
+        description: Custom prompt for search context
+      k:
+        type: [integer, "null"]
+        minimum: 1
+        maximum: 100
+        default: 10
+        description: Number of results to retrieve
+
+  localSearchOptions:
+    type: object
+    description: Options for local_search (entity/relationship focused)
+    additionalProperties: false
+    properties:
+      chat_model_id:
+        type: string
+        description: Model ID for chat completion
+      embedding_model_id:
+        type: string
+        description: Embedding model for entity search
+      prompt:
+        type: [string, "null"]
+        description: Custom prompt for search
+      text_unit_prop:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Proportion of context for text units
+      community_prop:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Proportion of context for community summaries
+      conversation_history_max_turns:
+        type: integer
+        minimum: 0
+        description: Max conversation history turns
+      top_k_entities:
+        type: integer
+        minimum: 1
+        default: 10
+        description: Number of top entities to retrieve
+      top_k_relationships:
+        type: integer
+        minimum: 1
+        default: 10
+        description: Number of top relationships to retrieve
+      max_context_tokens:
+        type: integer
+        minimum: 1
+        description: Maximum tokens for context
+
+  globalSearchOptions:
+    type: object
+    description: Options for global_search (community-level summaries)
+    additionalProperties: false
+    properties:
+      chat_model_id:
+        type: string
+        description: Model ID for chat completion
+        examples: [gpt-4.1-mini]
+      knowledge_prompt:
+        type: [string, "null"]
+        description: Knowledge context prompt
+      max_context_tokens:
+        type: integer
+        minimum: 1
+        default: 9000
+        description: Maximum tokens for context
+      data_max_tokens:
+        type: integer
+        minimum: 1
+        default: 4500
+        description: Maximum tokens for data
+      map_max_length:
+        type: integer
+        minimum: 1
+        default: 1800
+        description: Maximum length for map phase output
+      reduce_max_length:
+        type: integer
+        minimum: 1
+        default: 1600
+        description: Maximum length for reduce phase output
+      dynamic_search_threshold:
+        type: integer
+        minimum: 0
+        default: 2
+        description: Threshold for dynamic community search
+      dynamic_search_keep_parent:
+        type: boolean
+        default: true
+        description: Keep parent community in dynamic search
+      dynamic_search_num_repeats:
+        type: integer
+        minimum: 1
+        default: 1
+        description: Number of dynamic search repeats
+      dynamic_search_use_summary:
+        type: boolean
+        default: true
+        description: Use community summaries in dynamic search
+      dynamic_search_max_level:
+        type: integer
+        minimum: 0
+        default: 2
+        description: Maximum level for dynamic search
+
+  driftSearchOptions:
+    type: object
+    description: Options for drift_search (multi-hop exploration)
+    additionalProperties: false
+    properties:
+      chat_model_id:
+        type: string
+        description: Model ID for chat completion
+      embedding_model_id:
+        type: string
+        description: Embedding model for search
+      prompt:
+        type: [string, "null"]
+        description: Custom prompt for search
+      reduce_prompt:
+        type: [string, "null"]
+        description: Custom prompt for reduce phase
+      data_max_tokens:
+        type: integer
+        minimum: 1
+        description: Maximum tokens for data
+      concurrency:
+        type: integer
+        minimum: 1
+        description: Concurrent search operations
+      drift_k_followups:
+        type: integer
+        minimum: 1
+        description: Number of follow-up queries per hop
+      primer_folds:
+        type: integer
+        minimum: 1
+        description: Number of primer folds
+      primer_llm_max_tokens:
+        type: integer
+        minimum: 1
+        description: Max tokens for primer LLM
+      n_depth:
+        type: integer
+        minimum: 1
+        maximum: 5
+        default: 2
+        description: Maximum exploration depth (hops)
+      local_search_text_unit_prop:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Text unit proportion for local search
+      local_search_community_prop:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Community proportion for local search
+      local_search_top_k_mapped_entities:
+        type: integer
+        minimum: 1
+        description: Top K mapped entities for local search
+      local_search_top_k_relationships:
+        type: integer
+        minimum: 1
+        description: Top K relationships for local search
+      local_search_max_data_tokens:
+        type: integer
+        minimum: 1
+        description: Max data tokens for local search
+      local_search_temperature:
+        type: number
+        minimum: 0
+        maximum: 2
+        description: Temperature for local search
+      local_search_top_p:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: Top P for local search
+      local_search_n:
+        type: integer
+        minimum: 1
+        description: N for local search
+
+  searchOptions:
+    type: object
+    description: Search options nested under the search type key
+    additionalProperties: false
+    properties:
+      basic_search: { "$ref": "#/$defs/basicSearchOptions" }
+      local_search: { "$ref": "#/$defs/localSearchOptions" }
+      global_search: { "$ref": "#/$defs/globalSearchOptions" }
+      drift_search: { "$ref": "#/$defs/driftSearchOptions" }
+    oneOf:
+      - required: [basic_search]
+      - required: [local_search]
+      - required: [global_search]
+      - required: [drift_search]
+
+  docsetSubtask:
+    type: object
+    description: >-
+      A subtask that searches a docset and produces intermediate output.
+      When search_type is omitted, the agent autonomously decides which
+      search methods to use.
+    required: [id, prompt, output_schema]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        description: Unique subtask identifier
+        examples: [arr_retention_extract, kpi_arr_retention]
+      docset_id:
+        type: string
+        minLength: 1
+        description: >-
+          Bind this subtask to a specific top-level docset. Overrides
+          computation-level docset_id. When set, search tools are pre-scoped.
+        examples: [shipwell_board_deck_25q4]
+      search_type:
+        type: string
+        enum: [basic, local, global, drift]
+        description: >-
+          Type of GraphRAG search. OPTIONAL - when omitted, agent autonomously
+          chooses search strategy with access to ALL search tools (basic, local,
+          global, drift).
+        examples: [global, basic]
+      options:
+        "$ref": "#/$defs/searchOptions"
+        description: Search options nested under the search type key. Optional when using autonomous mode (no search_type).
+      prompt:
+        type: string
+        minLength: 1
+        description: Subtask-specific extraction prompt
+        examples: ["From the ARR & Logo Waterfall slides, extract..."]
+      output_schema:
+        type: object
+        description: "JSON Schema for this subtask's output"
+        required: [type]
+        properties:
+          type: { type: string }
+          properties: { type: object }
+          required:
+            type: array
+            items: { type: string }
+
+  mcpSubtask:
+    type: object
+    description: MCP integration subtask with per-MCP prompt
+    required: [id, prompt]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        description: MCP endpoint ID (must match an id in the mcp array)
+        examples: [system_of_record]
+      prompt:
+        type: string
+        minLength: 1
+        description: Prompt describing what to do with this MCP endpoint
+        examples: ["Upsert the KPI rows to the system of record..."]
+
+  fieldComputation:
+    type: object
+    description: A computation that produces a single structured value
+    required: [id, label, prompt]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Unique computation ID (used in template as {{field.id}})"
+        examples: [arr_retention_snapshot, net_new_arr]
+      label:
+        type: string
+        minLength: 1
+        description: Human-readable label for the field
+        examples: ["ARR & Retention Snapshot", "Net New ARR"]
+      type:
+        type: string
+        default: object
+        description: Output type hint
+        examples: [object, number, string]
+      description:
+        type: string
+        description: Detailed description
+      priority:
+        type: integer
+        default: 0
+        description: Execution priority (lower = earlier)
+      depends_on:
+        type: array
+        items: { type: string, minLength: 1 }
+        description: IDs of computations this depends on
+      docset_id:
+        type: string
+        minLength: 1
+        description: >-
+          Default docset for all subtasks in this computation. Overridden by
+          subtask-level docset_id. When set, search tools are pre-scoped.
+        examples: [shipwell_board_deck_25q4]
+      agents:
+        type: array
+        description: Agent subtasks — each spawns a ReAct agent with its own prompt and search tools
+        items: { "$ref": "#/$defs/docsetSubtask" }
+      mcp_scope:
+        type: array
+        description: Array of MCP subtasks with per-MCP prompts
+        items: { "$ref": "#/$defs/mcpSubtask" }
+      prompt:
+        type: string
+        minLength: 1
+        description: Synthesis prompt - combines subtask outputs into final result
+        examples: ["Return 25Q4 ARR snapshot with citations."]
+      output_schema:
+        type: object
+        description: >-
+          JSON Schema for the final synthesized output. Only needed for
+          multi-agent computations where synthesis combines different schemas.
+          For single-agent computations, the agent's output_schema is used automatically.
+        properties:
+          type: { type: string }
+          properties: { type: object }
+          required:
+            type: array
+            items: { type: string }
+
+  tableComputation:
+    type: object
+    description: A computation that produces a table with multiple rows
+    required: [id, title, prompt]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: "Unique computation ID (used in template as {{table.id}})"
+        examples: [cfo_kpi_export, key_deals]
+      title:
+        type: string
+        minLength: 1
+        description: Human-readable title for the table
+        examples: ["CFO KPI Export", "Key Customer Deals"]
+      description:
+        type: string
+        description: Detailed description
+      priority:
+        type: integer
+        default: 0
+        description: Execution priority (lower = earlier)
+      depends_on:
+        type: array
+        items: { type: string, minLength: 1 }
+        description: IDs of computations this depends on
+      docset_id:
+        type: string
+        minLength: 1
+        description: >-
+          Default docset for all subtasks in this computation. Overridden by
+          subtask-level docset_id. When set, search tools are pre-scoped.
+        examples: [shipwell_board_deck_25q4]
+      agents:
+        type: array
+        description: Agent subtasks — each spawns a ReAct agent with its own prompt and search tools
+        items: { "$ref": "#/$defs/docsetSubtask" }
+      mcp_scope:
+        type: array
+        description: Array of MCP subtasks
+        items: { "$ref": "#/$defs/mcpSubtask" }
+      prompt:
+        type: string
+        minLength: 1
+        description: Synthesis prompt - combines subtask outputs into final table
+      output_schema:
+        type: object
+        description: >-
+          JSON Schema for the final table output. Only needed for multi-agent
+          computations. For single-agent computations, the agent's output_schema
+          is used automatically.
+        properties:
+          type: { type: string }
+          properties: { type: object }
+          required:
+            type: array
+            items: { type: string }
+
+  guardrail:
+    type: object
+    description: LLM-judge validation rule for computed outputs
+    required: [id, target, on_fail, model, api_key, prompt]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: Unique guardrail identifier
+        examples: [gr_no_uncited_numbers, gr_arr_math]
+      target:
+        type: string
+        minLength: 1
+        description: >-
+          What to validate: 'computations' (all), 'field.{id}' (single field),
+          'table.{id}' (single table), 'final_report' (rendered report)
+        examples: [computations, field.arr_retention_snapshot, table.arr_logo_waterfall_history, final_report]
+      on_fail:
+        type: string
+        enum: [error, warn]
+        description: "Action on failure: 'error' blocks output, 'warn' just reports"
+        examples: [warn, error]
+      model:
+        type: string
+        minLength: 1
+        description: Model ID for LLM-judge
+        examples: [gpt-4.1-mini, gpt-4o]
+      base_url:
+        type: string
+        description: "Custom base URL for guardrail LLM (supports ${ENV_VAR})"
+        examples: ["${OPENAI_BASE_URL:-https://api.openai.com/v1}"]
+      api_key:
+        type: string
+        minLength: 1
+        description: "API key for guardrail LLM (supports ${ENV_VAR})"
+        examples: ["${LLAMAINDEX_API_KEY}"]
+      prompt:
+        type: string
+        minLength: 1
+        description: "Validation prompt. Use {{content}} placeholder for the value being checked."
+        examples: ["Enforce that every numeric value includes a citation..."]
+      system_prompt:
+        type: string
+        description: "Custom system prompt for this guardrail's LLM-judge. Overrides llamaindex.guardrail_system_prompt."
+      description:
+        type: string
+        description: Human-readable description of what this guardrail checks
+
+  executionConfig:
+    type: object
+    description: Execution settings for retries and output configuration
+    additionalProperties: false
+    properties:
+      retries:
+        type: object
+        additionalProperties: false
+        properties:
+          max_attempts:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 3
+            description: Maximum retry attempts per computation
+          backoff_seconds:
+            type: number
+            minimum: 0
+            default: 1.0
+            description: Seconds to wait between retries
+      output:
+        type: object
+        additionalProperties: false
+        properties:
+          directory:
+            type: string
+            default: ./output
+            description: Directory for output files
+          timestamp_suffix:
+            type: boolean
+            default: false
+            description: Add timestamp to output directory name
+          include_final_report:
+            type: boolean
+            default: true
+            description: Generate final markdown report
+          include_computed_json:
+            type: boolean
+            default: true
+            description: Include raw computed values as JSON
+          include_evidence:
+            type: boolean
+            default: true
+            description: Include search results and evidence
+          include_guardrails:
+            type: boolean
+            default: true
+            description: Run guardrails and include guardrails.json

@@ -1,0 +1,443 @@
+# VC Portfolio Monitoring Report
+# Use case: Monthly portfolio review across multiple portfolio companies.
+# Each company has its own docset (separate GraphRAG index).
+# Extracts ARR, burn, runway, headcount, and key risks per company,
+# then synthesises a cross-portfolio dashboard.
+# Schema v2.2
+
+schema_version: "2.2"
+
+report:
+  id: vc_portfolio_monitoring_q1_2026
+  name: "VC Portfolio Monitoring — Q1 2026"
+  description: |
+    Cross-portfolio KPI dashboard extracting key metrics from each portfolio
+    company's board update or monthly investor report.
+    Covers ARR/revenue, burn/runway, headcount, recent milestones, and risks.
+  version: "2026.Q1"
+
+context:
+  fund_name: "Acme Ventures Fund III"
+  reporting_period: "Q1 2026"
+  as_of_date: "2026-03-31"
+  currency: "USD"
+  units_policy: |
+    Return raw full-dollar numbers. Convert abbreviations:
+    "$2.5M" → 2500000, "$350K" → 350000, "$1.2B" → 1200000000.
+    Percentages as whole numbers: 92.3 not 0.923.
+    Return null for any value not explicitly found in the document.
+  answer_quality_policy:
+    numeric_requirements:
+      - "Every numeric value must have a citation (c_xxxxxxxx format)"
+      - "Return null for values not explicitly stated — never estimate"
+    labeling_requirements:
+      - "Always include the reporting period with each metric"
+
+doc_repository:
+  api_base_url: ${DOC_REPO_URL:-http://localhost:8080}
+  api_key: ${DOC_REPO_API_KEY}
+  rotation: 200
+
+mcp: []
+
+# Each portfolio company is its own docset with its own GraphRAG index
+docsets:
+  - id: company_alpha
+    description: "Alpha Inc — Q1 2026 board update"
+    api_key: ${OPENAI_API_KEY}
+    docs:
+      - id: alpha_board_update
+        locator: "repo:doc-alpha0001"
+        description: "Alpha Inc Q1 2026 Board Update"
+
+  - id: company_beta
+    description: "Beta Systems — Q1 2026 monthly investor report"
+    api_key: ${OPENAI_API_KEY}
+    docs:
+      - id: beta_investor_report
+        locator: "repo:doc-beta0002"
+        description: "Beta Systems Q1 2026 Investor Report"
+
+  - id: company_gamma
+    description: "Gamma Health — Q1 2026 board deck"
+    api_key: ${OPENAI_API_KEY}
+    docs:
+      - id: gamma_board_deck
+        locator: "repo:doc-gamma003"
+        description: "Gamma Health Q1 2026 Board Deck"
+
+llamaindex:
+  model: gpt-4o
+  base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  api_key: ${OPENAI_API_KEY}
+  max_tool_calls: 40
+  tool_timeout_seconds: 150
+  max_agent_iterations: 35
+  system_prompt: |
+    You are a venture capital analyst extracting KPIs from portfolio company reports.
+
+    ## ANTI-FABRICATION RULE
+    ALL values MUST come from your search tool results. Never guess. Return null if not found.
+
+    ## Rules
+    1. Return raw full-dollar numbers (9700000 not "$9.7M")
+    2. Percentages as whole numbers (92.3 not 0.923)
+    3. Every numeric value needs a c_xxxxxxxx citation
+    4. Return null for any value not explicitly stated in the document
+    5. Negative values are valid (e.g., churn ARR, net cash burn)
+
+computations:
+  fields:
+
+    # ── Company Alpha KPIs ─────────────────────────────────────────────────────
+    - id: alpha_kpis
+      label: "Alpha Inc — Q1 2026 KPIs"
+      type: object
+      priority: 1
+      docset_id: company_alpha
+      agents:
+        - id: alpha_extract
+          prompt: |
+            Extract the following KPIs for Alpha Inc from their Q1 2026 board update.
+
+            ## Financial Metrics
+            - arr_end: Ending ARR for the most recent period (full dollars)
+            - arr_mom_growth_pct: MoM or QoQ ARR growth % (whole number)
+            - monthly_burn: Net monthly cash burn (full dollars)
+            - cash_on_hand: Current cash balance (full dollars)
+            - runway_months: Months of runway at current burn
+
+            ## Operating Metrics
+            - headcount: Total employee count
+            - customer_count: Total paying customer or logo count
+            - nrr: Net Revenue Retention % (if stated)
+
+            ## Qualitative
+            - top_milestone: Single most important milestone this quarter (string)
+            - top_risk: Single most important risk mentioned (string)
+
+            ## Search Strategy
+            1. basic_search: "ARR revenue growth Q1 2026 monthly"
+            2. basic_search: "cash burn runway headcount customers"
+            3. basic_search: "highlights milestones risks challenges"
+
+            Set to null anything not explicitly stated.
+          output_schema:
+            type: object
+            properties:
+              company: { type: string }
+              period: { type: string }
+              arr_end: { type: number }
+              arr_mom_growth_pct: { type: number }
+              monthly_burn: { type: number }
+              cash_on_hand: { type: number }
+              runway_months: { type: number }
+              headcount: { type: number }
+              customer_count: { type: number }
+              nrr: { type: number }
+              top_milestone: { type: string }
+              top_risk: { type: string }
+              citations: { type: array, items: { type: string } }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return Alpha Inc Q1 2026 KPIs with citations."
+
+    # ── Company Beta KPIs ──────────────────────────────────────────────────────
+    - id: beta_kpis
+      label: "Beta Systems — Q1 2026 KPIs"
+      type: object
+      priority: 1
+      docset_id: company_beta
+      agents:
+        - id: beta_extract
+          prompt: |
+            Extract the following KPIs for Beta Systems from their Q1 2026 investor report.
+
+            ## Financial Metrics
+            - arr_end: Ending ARR for the most recent period
+            - arr_mom_growth_pct: MoM or QoQ ARR growth %
+            - monthly_burn: Net monthly cash burn
+            - cash_on_hand: Current cash balance
+            - runway_months: Months of runway at current burn
+
+            ## Operating Metrics
+            - headcount: Total employee count
+            - customer_count: Total paying customer count
+            - nrr: Net Revenue Retention % (if stated)
+
+            ## Qualitative
+            - top_milestone: Most important milestone this quarter
+            - top_risk: Most important risk mentioned
+
+            ## Search Strategy
+            1. basic_search: "ARR revenue MRR monthly quarterly growth"
+            2. basic_search: "cash burn runway balance headcount team"
+            3. basic_search: "highlights wins milestones risks concerns"
+
+            Set to null anything not explicitly stated.
+          output_schema:
+            type: object
+            properties:
+              company: { type: string }
+              period: { type: string }
+              arr_end: { type: number }
+              arr_mom_growth_pct: { type: number }
+              monthly_burn: { type: number }
+              cash_on_hand: { type: number }
+              runway_months: { type: number }
+              headcount: { type: number }
+              customer_count: { type: number }
+              nrr: { type: number }
+              top_milestone: { type: string }
+              top_risk: { type: string }
+              citations: { type: array, items: { type: string } }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return Beta Systems Q1 2026 KPIs with citations."
+
+    # ── Company Gamma KPIs ─────────────────────────────────────────────────────
+    - id: gamma_kpis
+      label: "Gamma Health — Q1 2026 KPIs"
+      type: object
+      priority: 1
+      docset_id: company_gamma
+      agents:
+        - id: gamma_extract
+          prompt: |
+            Extract KPIs for Gamma Health from their Q1 2026 board deck.
+
+            ## Financial Metrics
+            - arr_end or revenue_end: ARR or revenue for the quarter
+            - arr_mom_growth_pct: MoM or QoQ growth %
+            - monthly_burn: Net monthly cash burn
+            - cash_on_hand: Current cash balance
+            - runway_months: Months of runway
+
+            ## Operating Metrics
+            - headcount: Total employee count
+            - customer_count: Patients, clients, or paying customer count
+            - nrr: Net Revenue Retention % (if applicable)
+
+            ## Qualitative
+            - top_milestone: Most important milestone
+            - top_risk: Most important risk
+
+            ## Search Strategy
+            1. basic_search: "revenue ARR growth quarterly monthly"
+            2. basic_search: "cash burn runway balance employees headcount"
+            3. basic_search: "milestones highlights risks"
+
+            Set to null anything not explicitly stated.
+          output_schema:
+            type: object
+            properties:
+              company: { type: string }
+              period: { type: string }
+              arr_end: { type: number }
+              arr_mom_growth_pct: { type: number }
+              monthly_burn: { type: number }
+              cash_on_hand: { type: number }
+              runway_months: { type: number }
+              headcount: { type: number }
+              customer_count: { type: number }
+              nrr: { type: number }
+              top_milestone: { type: string }
+              top_risk: { type: string }
+              citations: { type: array, items: { type: string } }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return Gamma Health Q1 2026 KPIs with citations."
+
+    # ── Cross-Portfolio Summary (depends on all 3 companies) ──────────────────
+    - id: portfolio_summary
+      label: "Cross-Portfolio Summary"
+      type: object
+      priority: 2
+      depends_on: [alpha_kpis, beta_kpis, gamma_kpis]
+      agents:
+        - id: portfolio_summary_extract
+          docset_id: company_alpha   # use any docset — this agent synthesises from context
+          prompt: |
+            Summarise the overall health of the portfolio based on the individual
+            company KPIs available in your context (from depends_on).
+
+            ## What to Produce
+            - total_portfolio_arr: Sum of all companies' ARR (null if any are missing)
+            - portfolio_avg_runway_months: Average runway across companies
+            - healthiest_company: Company name with strongest metrics
+            - most_at_risk_company: Company name with lowest runway or highest burn
+            - common_themes: 2-3 themes appearing across multiple companies
+            - portfolio_outlook: "positive" | "cautious" | "mixed" | "concerning"
+
+            Base your answer entirely on the company KPIs from context.
+            If a company KPI is null, exclude it from calculations and note it.
+          output_schema:
+            type: object
+            properties:
+              total_portfolio_arr: { type: number }
+              portfolio_avg_runway_months: { type: number }
+              healthiest_company: { type: string }
+              most_at_risk_company: { type: string }
+              common_themes: { type: array, items: { type: string } }
+              portfolio_outlook: { type: string }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return cross-portfolio summary derived from company KPIs."
+
+  tables:
+    # ── Portfolio Dashboard Table ──────────────────────────────────────────────
+    - id: portfolio_dashboard
+      title: "Portfolio Company Dashboard — Q1 2026"
+      priority: 2
+      depends_on: [alpha_kpis, beta_kpis, gamma_kpis]
+      agents:
+        - id: dashboard_build
+          docset_id: company_alpha   # placeholder — values come from context
+          prompt: |
+            Build the portfolio dashboard table from the company KPI results
+            available in your context (from depends_on).
+
+            For each of the 3 companies (Alpha Inc, Beta Systems, Gamma Health),
+            create one row with:
+            - company: Company name
+            - arr_end: Ending ARR (full dollars)
+            - arr_growth_pct: QoQ ARR growth %
+            - monthly_burn: Monthly burn (full dollars)
+            - runway_months: Runway in months
+            - headcount: Employee count
+            - nrr: NRR % (if available)
+            - outlook: "green" | "yellow" | "red" based on runway and growth
+
+            Use only values from the company KPIs in context. Set null where missing.
+            Return {"rows": [...]} with one object per company.
+          output_schema:
+            type: object
+            properties:
+              rows:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    company: { type: string }
+                    arr_end: { type: number }
+                    arr_growth_pct: { type: number }
+                    monthly_burn: { type: number }
+                    runway_months: { type: number }
+                    headcount: { type: number }
+                    nrr: { type: number }
+                    outlook: { type: string }
+      mcp_scope: []
+      prompt: "Build portfolio dashboard table from company KPIs."
+
+template:
+  format: markdown
+  sections:
+    header: |
+      # {{report.name}}
+      > **Fund:** {{context.fund_name}} | **As of:** {{context.as_of_date}} | **Period:** {{context.reporting_period}}
+
+  content: |
+    {{sections.header}}
+
+    ---
+
+    ## Portfolio Dashboard
+
+    {{table.portfolio_dashboard}}
+
+    **Overall outlook:** {{ field.portfolio_summary.portfolio_outlook | default("—") }}
+    **Combined portfolio ARR:** {{ field.portfolio_summary.total_portfolio_arr | currency("$", 0) | default("—") }}
+    **Average runway:** {{ field.portfolio_summary.portfolio_avg_runway_months | number(1) | default("—") }} months
+
+    **Common themes:** {{ field.portfolio_summary.common_themes | default("—") }}
+    **Healthiest:** {{ field.portfolio_summary.healthiest_company | default("—") }}
+    **Most at risk:** {{ field.portfolio_summary.most_at_risk_company | default("—") }}
+
+    ---
+
+    ## Alpha Inc
+
+    | Metric | Value |
+    |--------|-------|
+    | ARR | {{ field.alpha_kpis.arr_end | currency("$", 0) | default("—") }} |
+    | QoQ Growth | {{ field.alpha_kpis.arr_mom_growth_pct | number(1) | default("—") }}% |
+    | Monthly Burn | {{ field.alpha_kpis.monthly_burn | currency("$", 0) | default("—") }}/mo |
+    | Cash | {{ field.alpha_kpis.cash_on_hand | currency("$", 0) | default("—") }} |
+    | Runway | {{ field.alpha_kpis.runway_months | number(1) | default("—") }} months |
+    | Headcount | {{ field.alpha_kpis.headcount | number(0) | default("—") }} |
+    | NRR | {{ field.alpha_kpis.nrr | number(1) | default("—") }}% |
+
+    **Milestone:** {{ field.alpha_kpis.top_milestone | default("—") }}
+    **Risk:** {{ field.alpha_kpis.top_risk | default("—") }}
+
+    ---
+
+    ## Beta Systems
+
+    | Metric | Value |
+    |--------|-------|
+    | ARR | {{ field.beta_kpis.arr_end | currency("$", 0) | default("—") }} |
+    | QoQ Growth | {{ field.beta_kpis.arr_mom_growth_pct | number(1) | default("—") }}% |
+    | Monthly Burn | {{ field.beta_kpis.monthly_burn | currency("$", 0) | default("—") }}/mo |
+    | Cash | {{ field.beta_kpis.cash_on_hand | currency("$", 0) | default("—") }} |
+    | Runway | {{ field.beta_kpis.runway_months | number(1) | default("—") }} months |
+    | Headcount | {{ field.beta_kpis.headcount | number(0) | default("—") }} |
+    | NRR | {{ field.beta_kpis.nrr | number(1) | default("—") }}% |
+
+    **Milestone:** {{ field.beta_kpis.top_milestone | default("—") }}
+    **Risk:** {{ field.beta_kpis.top_risk | default("—") }}
+
+    ---
+
+    ## Gamma Health
+
+    | Metric | Value |
+    |--------|-------|
+    | ARR | {{ field.gamma_kpis.arr_end | currency("$", 0) | default("—") }} |
+    | QoQ Growth | {{ field.gamma_kpis.arr_mom_growth_pct | number(1) | default("—") }}% |
+    | Monthly Burn | {{ field.gamma_kpis.monthly_burn | currency("$", 0) | default("—") }}/mo |
+    | Cash | {{ field.gamma_kpis.cash_on_hand | currency("$", 0) | default("—") }} |
+    | Runway | {{ field.gamma_kpis.runway_months | number(1) | default("—") }} months |
+    | Headcount | {{ field.gamma_kpis.headcount | number(0) | default("—") }} |
+    | NRR | {{ field.gamma_kpis.nrr | number(1) | default("—") }}% |
+
+    **Milestone:** {{ field.gamma_kpis.top_milestone | default("—") }}
+    **Risk:** {{ field.gamma_kpis.top_risk | default("—") }}
+
+guardrails:
+  - id: gr_no_fabrication
+    target: computations
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "Detect fabricated or placeholder values"
+    prompt: |
+      FAIL if you find: citations like "Source A"/"Source B" (real ones use c_xxxxxxxx),
+      ARR values that are ALL round multiples of 100000, or retention values below 1.0.
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+  - id: gr_runway_sanity
+    target: computations
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "Runway values must be positive and plausible"
+    prompt: |
+      Check all runway_months values. FAIL if any are negative or greater than 120 months.
+      Check all monthly_burn values. FAIL if any are positive (burn should be stored as positive number,
+      but flag if burn is implausibly large compared to cash, e.g., burn > cash).
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+execution:
+  retries:
+    max_attempts: 3
+    backoff_seconds: 2.0
+  output:
+    directory: ./output
+    timestamp_suffix: true
+    include_final_report: true
+    include_computed_json: true
+    include_evidence: true
+    include_guardrails: true

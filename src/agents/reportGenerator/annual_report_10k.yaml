@@ -1,0 +1,633 @@
+# Public Company Annual Report / 10-K Analysis
+# Use case: Structured extraction from a public company's annual report or SEC 10-K filing.
+# Extracts the income statement, balance sheet, cash flow, key ratios, segment breakdown,
+# management outlook (MD&A), and risk factors for equity research or credit analysis.
+# Schema v2.2
+
+schema_version: "2.2"
+
+report:
+  id: annual_report_acme_fy2025
+  name: "Annual Report Analysis — Acme Technologies, FY2025 10-K"
+  description: |
+    Structured extraction from Acme Technologies FY2025 Annual Report / 10-K.
+    Covers consolidated income statement, balance sheet, cash flow statement,
+    segment performance, key financial ratios, MD&A highlights, and risk factors.
+  version: "FY2025"
+
+context:
+  company_name: "Acme Technologies, Inc."
+  ticker: "ACME"
+  fiscal_year: "FY2025"
+  fiscal_year_end: "2025-12-31"
+  currency: "USD"
+  reporting_units: "thousands"   # most 10-Ks report in $thousands — adjust if different
+  units_policy: |
+    The 10-K reports values in thousands of dollars. Return values as STATED in the filing.
+    If the filing says "$1,234,567" that is already in thousands — return 1234567 (not 1234567000).
+    Clarify the unit in the notes field.
+    Return percentages as whole numbers (34.5 not 0.345).
+    Return null for any value not explicitly stated.
+  answer_quality_policy:
+    numeric_requirements:
+      - "Every financial statement line must have a citation"
+      - "Note the reporting units (thousands, millions) for each figure"
+      - "Distinguish between continuing and discontinued operations where relevant"
+
+doc_repository:
+  api_base_url: ${DOC_REPO_URL:-http://localhost:8080}
+  api_key: ${DOC_REPO_API_KEY}
+  rotation: 200
+
+mcp: []
+
+docsets:
+  - id: annual_report
+    description: "Acme Technologies FY2025 Annual Report / 10-K Filing"
+    api_key: ${OPENAI_API_KEY}
+    docs:
+      - id: ten_k_filing
+        locator: "repo:doc-acme-10k-fy25"
+        description: "Acme Technologies 10-K FY2025 Full Filing"
+        alias: ten_k
+
+llamaindex:
+  model: gpt-4o
+  base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  api_key: ${OPENAI_API_KEY}
+  max_tool_calls: 60
+  tool_timeout_seconds: 180
+  max_agent_iterations: 45
+  system_prompt: |
+    You are an equity research analyst extracting structured data from a public company 10-K.
+
+    ## ANTI-FABRICATION RULE
+    ALL values MUST come from your search tool results — the actual 10-K text.
+    Never use prior knowledge of this company's financials.
+    Return null for any value not explicitly stated in the filing.
+
+    ## 10-K Extraction Rules
+    1. Financial statements are typically reported in thousands — note this in output
+    2. Use the audited figures from the financial statements, not the MD&A summaries
+    3. Always extract both the current year and prior year comparatives
+    4. Segment data may be in a separate note — search explicitly for segment disclosures
+    5. Non-GAAP measures (Adjusted EBITDA, etc.) are in MD&A — distinguish from GAAP
+    6. Risk factors are in Item 1A — use global_search to find cross-cutting themes
+
+computations:
+  fields:
+
+    # ── Income Statement ──────────────────────────────────────────────────────
+    - id: income_statement
+      label: "Consolidated Income Statement (FY2025 & FY2024)"
+      type: object
+      priority: 1
+      docset_id: annual_report
+      agents:
+        - id: income_stmt_extract
+          search_type: basic   # income statement tables are best retrieved by basic search
+          options:
+            basic_search:
+              k: 15
+          prompt: |
+            Extract the consolidated income statement for FY2025 and FY2024.
+
+            ## What to Find
+            For each year (fy2025, fy2024):
+            - revenue: Total net revenue
+            - cost_of_revenue: Cost of revenue / cost of goods sold
+            - gross_profit: Gross profit
+            - gross_margin_pct: Gross profit / revenue × 100
+            - r_and_d: Research and development expense
+            - sales_and_marketing: Sales and marketing expense
+            - g_and_a: General and administrative expense
+            - total_opex: Total operating expenses (below gross profit line)
+            - operating_income: Operating income (EBIT)
+            - operating_margin_pct: Operating income / revenue × 100
+            - interest_expense: Interest expense (net)
+            - other_income_expense: Other income/expense
+            - pretax_income: Income before income taxes
+            - income_tax_expense: Income tax expense (benefit)
+            - net_income: Net income
+            - net_margin_pct: Net income / revenue × 100
+            - eps_diluted: Diluted EPS
+            - shares_diluted: Diluted weighted average shares outstanding
+            - units_label: What units are used ("thousands" / "millions")
+
+            ## Search Strategy
+            1. basic_search: "consolidated statements of operations income revenue FY2025"
+            2. basic_search: "gross profit operating income net income EPS diluted"
+            3. Look for the formal income statement tables
+          output_schema:
+            type: object
+            properties:
+              units_label: { type: string }
+              fy2025:
+                type: object
+                properties:
+                  revenue: { type: number }
+                  cost_of_revenue: { type: number }
+                  gross_profit: { type: number }
+                  gross_margin_pct: { type: number }
+                  r_and_d: { type: number }
+                  sales_and_marketing: { type: number }
+                  g_and_a: { type: number }
+                  total_opex: { type: number }
+                  operating_income: { type: number }
+                  operating_margin_pct: { type: number }
+                  interest_expense: { type: number }
+                  pretax_income: { type: number }
+                  income_tax_expense: { type: number }
+                  net_income: { type: number }
+                  net_margin_pct: { type: number }
+                  eps_diluted: { type: number }
+                  shares_diluted: { type: number }
+              fy2024:
+                type: object
+                properties:
+                  revenue: { type: number }
+                  gross_profit: { type: number }
+                  gross_margin_pct: { type: number }
+                  operating_income: { type: number }
+                  net_income: { type: number }
+                  eps_diluted: { type: number }
+              citations: { type: array, items: { type: string } }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return consolidated income statement for FY2025 and FY2024."
+
+    # ── Balance Sheet ─────────────────────────────────────────────────────────
+    - id: balance_sheet
+      label: "Consolidated Balance Sheet (FY2025 & FY2024)"
+      type: object
+      priority: 1
+      docset_id: annual_report
+      agents:
+        - id: balance_sheet_extract
+          search_type: basic
+          options:
+            basic_search:
+              k: 15
+          prompt: |
+            Extract the consolidated balance sheet as of FY2025 year-end and FY2024 year-end.
+
+            ## Current Assets
+            - cash_and_equivalents: Cash and cash equivalents
+            - short_term_investments: Short-term investments / marketable securities
+            - accounts_receivable: Net accounts receivable
+            - inventory: Inventory (if applicable)
+            - prepaid_and_other_current: Prepaid expenses and other current assets
+            - total_current_assets: Total current assets
+
+            ## Non-Current Assets
+            - ppe_net: Property, plant and equipment, net
+            - goodwill: Goodwill
+            - intangible_assets_net: Intangible assets, net
+            - operating_lease_rou: Operating lease right-of-use assets (if stated separately)
+            - other_long_term_assets: Other long-term assets
+            - total_assets: Total assets
+
+            ## Current Liabilities
+            - accounts_payable: Accounts payable
+            - accrued_liabilities: Accrued liabilities / accrued expenses
+            - deferred_revenue_current: Deferred revenue (current)
+            - current_debt: Current portion of long-term debt
+            - total_current_liabilities: Total current liabilities
+
+            ## Non-Current Liabilities
+            - long_term_debt: Long-term debt (net of current portion)
+            - deferred_revenue_lt: Deferred revenue (long-term)
+            - operating_lease_lt: Long-term operating lease liabilities
+            - other_long_term_liabilities: Other long-term liabilities
+            - total_liabilities: Total liabilities
+
+            ## Equity
+            - total_stockholders_equity: Total stockholders' equity
+            - total_liabilities_and_equity: Total liabilities and stockholders' equity
+
+            ## Search Strategy
+            1. basic_search: "consolidated balance sheet total assets liabilities equity"
+            2. basic_search: "cash receivable goodwill debt long-term"
+          output_schema:
+            type: object
+            properties:
+              units_label: { type: string }
+              fy2025:
+                type: object
+                properties:
+                  cash_and_equivalents: { type: number }
+                  short_term_investments: { type: number }
+                  accounts_receivable: { type: number }
+                  total_current_assets: { type: number }
+                  ppe_net: { type: number }
+                  goodwill: { type: number }
+                  intangible_assets_net: { type: number }
+                  total_assets: { type: number }
+                  accounts_payable: { type: number }
+                  current_debt: { type: number }
+                  total_current_liabilities: { type: number }
+                  long_term_debt: { type: number }
+                  total_liabilities: { type: number }
+                  total_stockholders_equity: { type: number }
+              fy2024:
+                type: object
+                properties:
+                  cash_and_equivalents: { type: number }
+                  total_assets: { type: number }
+                  long_term_debt: { type: number }
+                  total_stockholders_equity: { type: number }
+              citations: { type: array, items: { type: string } }
+      mcp_scope: []
+      prompt: "Return consolidated balance sheet for FY2025 and FY2024."
+
+    # ── Cash Flow Statement ───────────────────────────────────────────────────
+    - id: cash_flow
+      label: "Consolidated Cash Flow Statement (FY2025)"
+      type: object
+      priority: 1
+      docset_id: annual_report
+      agents:
+        - id: cash_flow_extract
+          search_type: basic
+          options:
+            basic_search:
+              k: 15
+          prompt: |
+            Extract the consolidated cash flow statement for FY2025.
+
+            ## Operating Activities
+            - net_income_cf: Net income (starting line)
+            - depreciation_and_amortization: D&A
+            - stock_based_compensation: Stock-based compensation
+            - changes_in_working_capital: Net change in working capital
+            - other_operating_adjustments: Other adjustments
+            - net_cash_from_operations: Net cash provided by operating activities
+
+            ## Investing Activities
+            - capex: Capital expenditures (should be negative)
+            - acquisitions: Cash paid for acquisitions (negative)
+            - purchases_of_investments: Purchases of investments
+            - proceeds_from_investments: Proceeds from maturities/sales of investments
+            - net_cash_from_investing: Net cash from investing activities
+
+            ## Financing Activities
+            - proceeds_from_debt: Proceeds from borrowings
+            - repayments_of_debt: Repayments of debt (negative)
+            - share_repurchases: Common stock repurchases (negative)
+            - dividends_paid: Dividends paid (negative, null if none)
+            - net_cash_from_financing: Net cash from financing activities
+
+            ## Summary
+            - net_change_in_cash: Net change in cash and equivalents
+            - free_cash_flow: net_cash_from_operations + capex (compute this)
+            - fcf_margin_pct: Free cash flow / revenue × 100
+
+            ## Search Strategy
+            1. basic_search: "cash flow operations investing financing activities FY2025"
+            2. basic_search: "capital expenditures free cash flow stock compensation"
+          output_schema:
+            type: object
+            properties:
+              units_label: { type: string }
+              net_income_cf: { type: number }
+              depreciation_and_amortization: { type: number }
+              stock_based_compensation: { type: number }
+              net_cash_from_operations: { type: number }
+              capex: { type: number }
+              acquisitions: { type: number }
+              net_cash_from_investing: { type: number }
+              share_repurchases: { type: number }
+              dividends_paid: { type: number }
+              net_cash_from_financing: { type: number }
+              net_change_in_cash: { type: number }
+              free_cash_flow: { type: number }
+              fcf_margin_pct: { type: number }
+              citations: { type: array, items: { type: string } }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return consolidated cash flow statement for FY2025."
+
+    # ── Key Financial Ratios ──────────────────────────────────────────────────
+    - id: key_ratios
+      label: "Key Financial Ratios & Metrics"
+      type: object
+      priority: 2
+      depends_on: [income_statement, balance_sheet, cash_flow]
+      docset_id: annual_report
+      agents:
+        - id: ratios_extract
+          docset_id: annual_report
+          prompt: |
+            Compute or extract key financial ratios from the financial statements.
+            Use the FY2025 figures from the statements in your context (from depends_on).
+
+            ## Profitability
+            - gross_margin_pct: Gross profit / Revenue × 100 (from income statement)
+            - operating_margin_pct: Operating income / Revenue × 100
+            - net_margin_pct: Net income / Revenue × 100
+            - fcf_margin_pct: Free cash flow / Revenue × 100 (from cash flow)
+            - roa_pct: Net income / Total assets × 100
+            - roe_pct: Net income / Stockholders equity × 100
+
+            ## Liquidity
+            - current_ratio: Current assets / Current liabilities
+            - quick_ratio: (Cash + Short-term investments + AR) / Current liabilities
+            - cash_and_investments: Cash + short-term investments
+
+            ## Leverage
+            - net_debt: Long-term debt + current debt - cash and investments
+            - net_debt_to_ebitda: Use reported EBITDA if available; otherwise skip
+            - interest_coverage: Operating income / Interest expense
+
+            ## Growth (YoY)
+            - revenue_growth_yoy_pct: (FY2025 revenue - FY2024 revenue) / FY2024 revenue × 100
+            - operating_income_growth_yoy_pct: YoY operating income growth %
+            - eps_growth_yoy_pct: YoY diluted EPS growth %
+
+            Compute from the financial statement data in your context.
+            Note: If a prior-year figure is not available, set growth metrics to null.
+          output_schema:
+            type: object
+            properties:
+              gross_margin_pct: { type: number }
+              operating_margin_pct: { type: number }
+              net_margin_pct: { type: number }
+              fcf_margin_pct: { type: number }
+              roa_pct: { type: number }
+              roe_pct: { type: number }
+              current_ratio: { type: number }
+              quick_ratio: { type: number }
+              cash_and_investments: { type: number }
+              net_debt: { type: number }
+              interest_coverage: { type: number }
+              revenue_growth_yoy_pct: { type: number }
+              eps_growth_yoy_pct: { type: number }
+              notes: { type: string }
+      mcp_scope: []
+      prompt: "Return key financial ratios computed from FY2025 financial statements."
+
+    # ── MD&A Highlights & Outlook ─────────────────────────────────────────────
+    - id: mda_and_outlook
+      label: "MD&A Highlights & Management Outlook"
+      type: object
+      priority: 2
+      docset_id: annual_report
+      agents:
+        - id: mda_extract
+          prompt: |
+            Extract the key highlights from Management's Discussion & Analysis (MD&A)
+            and the company's forward-looking guidance.
+
+            ## What to Find
+            - performance_narrative: Management's explanation of FY2025 performance (2-3 sentences)
+            - revenue_drivers: Key factors that drove revenue growth or decline
+            - margin_commentary: Management commentary on margin changes
+            - fy2026_revenue_guidance: FY2026 revenue guidance (full dollars or range)
+            - fy2026_eps_guidance: FY2026 diluted EPS guidance
+            - fy2026_other_guidance: Any other FY2026 metrics guided (operating margin, FCF, etc.)
+            - non_gaap_measures: Any non-GAAP measures highlighted (Adjusted EBITDA, Non-GAAP EPS, etc.)
+            - capital_allocation_commentary: Buybacks, dividends, M&A intent mentioned
+
+            ## Search Strategy
+            1. basic_search: "management discussion analysis MD&A results operations"
+            2. basic_search: "fiscal 2026 guidance outlook revenue earnings per share"
+            3. global_search: "strategic priorities company direction growth drivers"
+          output_schema:
+            type: object
+            properties:
+              performance_narrative: { type: string }
+              revenue_drivers: { type: array, items: { type: string } }
+              margin_commentary: { type: string }
+              fy2026_revenue_guidance: { type: string }
+              fy2026_eps_guidance: { type: string }
+              fy2026_other_guidance: { type: array, items: { type: string } }
+              non_gaap_measures: { type: array, items: { type: string } }
+              capital_allocation_commentary: { type: string }
+              citations: { type: array, items: { type: string } }
+      mcp_scope: []
+      prompt: "Return MD&A highlights and FY2026 guidance."
+
+    # ── Risk Factors ──────────────────────────────────────────────────────────
+    - id: risk_factors
+      label: "Key Risk Factors (Item 1A)"
+      type: object
+      priority: 2
+      docset_id: annual_report
+      agents:
+        - id: risks_extract
+          search_type: global   # risk factors are cross-cutting — global search is best
+          prompt: |
+            Extract the key risk factors from Item 1A of the 10-K.
+
+            ## What to Find
+            Identify 6-10 of the most material risks across these categories:
+            - business_risks: Competition, technology, product, operational
+            - financial_risks: Debt, liquidity, covenant, foreign exchange
+            - regulatory_risks: Compliance, government, data privacy, IP
+            - macro_risks: Economic conditions, interest rates, supply chain
+            - cyber_risks: Cybersecurity, data breaches, system failures
+
+            For each risk:
+            - category: One of the above
+            - title: Short risk title (as used in the 10-K if possible)
+            - summary: 1-sentence summary of the risk
+
+            ## Search Strategy
+            Use global_search to extract cross-cutting risk themes:
+            Query 1: "risk factors competition market technology"
+            Query 2: "regulatory compliance data privacy cybersecurity"
+            Query 3: "financial risks debt interest liquidity"
+          output_schema:
+            type: object
+            properties:
+              risks:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    category: { type: string }
+                    title: { type: string }
+                    summary: { type: string }
+                    citations: { type: array, items: { type: string } }
+              citations: { type: array, items: { type: string } }
+      mcp_scope: []
+      prompt: "Return the most material risk factors from Item 1A."
+
+  tables:
+    - id: income_statement_table
+      title: "Consolidated Income Statement (FY2025 vs FY2024)"
+      priority: 1
+      depends_on: [income_statement]
+      docset_id: annual_report
+      agents:
+        - id: income_table_build
+          docset_id: annual_report
+          prompt: |
+            Build the income statement comparison table from the data in your context.
+            For each line item, create one row:
+            - metric: Line item name
+            - fy2025: FY2025 value
+            - fy2024: FY2024 value
+            - change_pct: YoY change % (null if FY2024 not available)
+
+            Include: Revenue, Cost of Revenue, Gross Profit, Gross Margin %,
+            R&D, S&M, G&A, Operating Income, Operating Margin %, Net Income, Diluted EPS.
+            Return {"rows": [...]}
+          output_schema:
+            type: object
+            properties:
+              rows:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    metric: { type: string }
+                    fy2025: { type: number }
+                    fy2024: { type: number }
+                    change_pct: { type: number }
+      mcp_scope: []
+      prompt: "Return income statement comparison table."
+
+template:
+  format: markdown
+  sections:
+    header: |
+      # {{report.name}}
+      > **Company:** {{context.company_name}} ({{context.ticker}}) | **Fiscal Year:** {{context.fiscal_year}}
+      > **Reporting units:** USD {{context.reporting_units}}
+
+  content: |
+    {{sections.header}}
+
+    ---
+
+    ## Income Statement
+
+    {{table.income_statement_table}}
+
+    ---
+
+    ## Balance Sheet Highlights
+
+    | Metric | FY2025 | FY2024 |
+    |--------|--------|--------|
+    | Cash & Equivalents | {{ field.balance_sheet.fy2025.cash_and_equivalents | number(0) | default("—") }} | {{ field.balance_sheet.fy2024.cash_and_equivalents | number(0) | default("—") }} |
+    | Total Current Assets | {{ field.balance_sheet.fy2025.total_current_assets | number(0) | default("—") }} | — |
+    | Total Assets | {{ field.balance_sheet.fy2025.total_assets | number(0) | default("—") }} | {{ field.balance_sheet.fy2024.total_assets | number(0) | default("—") }} |
+    | Long-Term Debt | {{ field.balance_sheet.fy2025.long_term_debt | number(0) | default("—") }} | {{ field.balance_sheet.fy2024.long_term_debt | number(0) | default("—") }} |
+    | Total Stockholders' Equity | {{ field.balance_sheet.fy2025.total_stockholders_equity | number(0) | default("—") }} | {{ field.balance_sheet.fy2024.total_stockholders_equity | number(0) | default("—") }} |
+
+    ---
+
+    ## Cash Flow
+
+    | | FY2025 |
+    |-|--------|
+    | Cash from Operations | {{ field.cash_flow.net_cash_from_operations | number(0) | default("—") }} |
+    | Capital Expenditures | {{ field.cash_flow.capex | number(0) | default("—") }} |
+    | **Free Cash Flow** | **{{ field.cash_flow.free_cash_flow | number(0) | default("—") }}** |
+    | FCF Margin | {{ field.cash_flow.fcf_margin_pct | number(1) | default("—") }}% |
+    | Stock-Based Compensation | {{ field.cash_flow.stock_based_compensation | number(0) | default("—") }} |
+    | Share Repurchases | {{ field.cash_flow.share_repurchases | number(0) | default("—") }} |
+
+    ---
+
+    ## Key Financial Ratios (FY2025)
+
+    | Ratio | Value |
+    |-------|-------|
+    | Gross Margin | {{ field.key_ratios.gross_margin_pct | number(1) | default("—") }}% |
+    | Operating Margin | {{ field.key_ratios.operating_margin_pct | number(1) | default("—") }}% |
+    | Net Margin | {{ field.key_ratios.net_margin_pct | number(1) | default("—") }}% |
+    | FCF Margin | {{ field.key_ratios.fcf_margin_pct | number(1) | default("—") }}% |
+    | ROE | {{ field.key_ratios.roe_pct | number(1) | default("—") }}% |
+    | Current Ratio | {{ field.key_ratios.current_ratio | number(2) | default("—") }}x |
+    | Net Debt | {{ field.key_ratios.net_debt | number(0) | default("—") }} |
+    | Revenue Growth YoY | {{ field.key_ratios.revenue_growth_yoy_pct | number(1) | default("—") }}% |
+    | EPS Growth YoY | {{ field.key_ratios.eps_growth_yoy_pct | number(1) | default("—") }}% |
+
+    ---
+
+    ## MD&A Highlights & FY2026 Guidance
+
+    {{ field.mda_and_outlook.performance_narrative | default("—") }}
+
+    **Revenue drivers:** {{ field.mda_and_outlook.revenue_drivers | default("—") }}
+    **Margin commentary:** {{ field.mda_and_outlook.margin_commentary | default("—") }}
+
+    ### FY2026 Guidance
+    | | |
+    |-|-|
+    | Revenue | {{ field.mda_and_outlook.fy2026_revenue_guidance | default("Not provided") }} |
+    | EPS | {{ field.mda_and_outlook.fy2026_eps_guidance | default("Not provided") }} |
+    | Other | {{ field.mda_and_outlook.fy2026_other_guidance | default("—") }} |
+
+    **Capital allocation:** {{ field.mda_and_outlook.capital_allocation_commentary | default("—") }}
+
+    ---
+
+    ## Key Risk Factors
+
+    {{ field.risk_factors.risks | default("—") }}
+
+guardrails:
+  - id: gr_balance_sheet_balances
+    target: field.balance_sheet
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "Total assets must equal total liabilities plus equity"
+    prompt: |
+      Verify: total_assets ≈ total_liabilities + total_stockholders_equity (within 1%)
+      Also verify: total_current_assets < total_assets
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+  - id: gr_income_stmt_math
+    target: field.income_statement
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "Income statement lines must add up correctly"
+    prompt: |
+      Verify for FY2025: gross_profit ≈ revenue - cost_of_revenue (within 1%)
+      Verify: net_income < gross_profit (unless extraordinary items)
+      Verify: eps_diluted ≈ net_income / shares_diluted (within 5%)
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+  - id: gr_fcf_math
+    target: field.cash_flow
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "FCF must equal operating cash flow plus capex"
+    prompt: |
+      Verify: free_cash_flow ≈ net_cash_from_operations + capex (capex is negative, so this is effectively subtracted)
+      Allow 1% tolerance for rounding.
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+  - id: gr_no_fabrication
+    target: computations
+    on_fail: warn
+    model: gpt-4.1-mini
+    api_key: ${OPENAI_API_KEY}
+    description: "Detect fabricated values"
+    prompt: |
+      FAIL if citations are "Source A"/"Source B" style (real ones use c_xxxxxxxx).
+      FAIL if ALL financial statement values are round multiples of 100000.
+      Return JSON: {"pass": boolean, "issues": []}
+      Content: {{content}}
+
+execution:
+  retries:
+    max_attempts: 3
+    backoff_seconds: 2.0
+  output:
+    directory: ./output
+    timestamp_suffix: false
+    include_final_report: true
+    include_computed_json: true
+    include_evidence: true
+    include_guardrails: true
