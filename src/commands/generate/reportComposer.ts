@@ -3,14 +3,16 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 import ora from 'ora';
-import { runReportComposerAgent } from '../../agents/reportGenerator';
+import { runReportComposerAgent } from '../../agents/reportGenerator/anthropic';
+import { runReportComposerAgentWithOpenAI } from '../../agents/reportGenerator/openai';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ReportComposerGenerateOptions {
   file: string;
   output: string;
-  anthropicApiKey: string;
+  anthropicApiKey?: string;
+  openAiApiKey?: string;
   model?: string;
   maxIterations?: string;
 }
@@ -25,18 +27,29 @@ export function registerReportComposerGenerateCommand(generateCommand: Command):
     )
     .requiredOption('-f, --file <path>', 'Path to the instructions Markdown file')
     .requiredOption('-o, --output <dir>', 'Output directory for the generated report.yaml')
-    .requiredOption('--anthropicApiKey <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
-    .option('--model <model>', 'Claude model ID', 'claude-sonnet-4-6')
+    .option('--anthropicApiKey <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
+    .option('--openAiApiKey <key>', 'OpenAI API key (or set OPENAI_API_KEY env var)')
+    .option('--model <model>', 'Model ID (defaults to claude-sonnet-4-6 for Anthropic, gpt-4o for OpenAI)')
     .option('--maxIterations <n>', 'Maximum agent iterations', '5')
     .action(async (options: ReportComposerGenerateOptions) => {
-      // ── Resolve API key (flag takes priority over env var) ─────────────────
-      const apiKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
+      // ── Resolve API keys ────────────────────────────────────────────────────
+      const anthropicKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
+      const openAiKey = options.openAiApiKey || process.env.OPENAI_API_KEY;
+
+      if (!anthropicKey && !openAiKey) {
         console.error(
-          chalk.red('Error: Anthropic API key required. Use --anthropicApiKey or set ANTHROPIC_API_KEY.'),
+          chalk.red(
+            'Error: An API key is required. Provide --anthropicApiKey / ANTHROPIC_API_KEY or --openAiApiKey / OPENAI_API_KEY.',
+          ),
         );
         process.exit(1);
       }
+
+      // Anthropic takes precedence when both are available
+      const useAnthropic = !!anthropicKey;
+      const provider = useAnthropic ? 'Claude (Anthropic)' : 'GPT (OpenAI)';
+      const defaultModel = useAnthropic ? 'claude-sonnet-4-6' : 'gpt-4o';
+      const model = options.model ?? defaultModel;
 
       // ── Read instructions file ──────────────────────────────────────────────
       const instructionsPath = path.resolve(options.file);
@@ -60,21 +73,25 @@ export function registerReportComposerGenerateCommand(generateCommand: Command):
       console.log(chalk.bold('\nNestbox — Report Composer Generator'));
       console.log(chalk.dim(`Instructions: ${instructionsPath}`));
       console.log(chalk.dim(`Output:       ${outputDir}`));
-      console.log(chalk.dim(`Model:        ${options.model}`));
+      console.log(chalk.dim(`Provider:     ${provider}`));
+      console.log(chalk.dim(`Model:        ${model}`));
       console.log();
 
       const spinner = ora('Initialising agent...').start();
 
       try {
-        const result = await runReportComposerAgent({
+        const agentOptions = {
           instructions,
-          anthropicApiKey: apiKey,
-          model: options.model,
-          maxIterations: parseInt(options.maxIterations ?? '8', 10),
-          onProgress: (msg) => {
+          model,
+          maxIterations: parseInt(options.maxIterations ?? '5', 10),
+          onProgress: (msg: string) => {
             spinner.text = msg;
           },
-        });
+        };
+
+        const result = useAnthropic
+          ? await runReportComposerAgent({ ...agentOptions, anthropicApiKey: anthropicKey! })
+          : await runReportComposerAgentWithOpenAI({ ...agentOptions, openAiApiKey: openAiKey! });
 
         spinner.stop();
 

@@ -88,7 +88,7 @@ describe('Generate Commands', () => {
       );
     });
 
-    it('should have required options: --file, --output, --anthropicApiKey', () => {
+    it('should have required options: --file, --output', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
@@ -98,7 +98,32 @@ describe('Generate Commands', () => {
 
       expect(longs).toContain('--file');
       expect(longs).toContain('--output');
+    });
+
+    it('should have API key options: --anthropicApiKey and --openAiApiKey', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const options = docProcCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
       expect(longs).toContain('--anthropicApiKey');
+      expect(longs).toContain('--openAiApiKey');
+    });
+
+    it('should have both API key options as optional (not mandatory)', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
+      const options = docProcCommand?.options ?? [];
+
+      const anthropicOption = options.find(o => o.long === '--anthropicApiKey');
+      const openAiOption = options.find(o => o.long === '--openAiApiKey');
+
+      expect(anthropicOption?.mandatory).toBe(false);
+      expect(openAiOption?.mandatory).toBe(false);
     });
 
     it('should have optional options: --model, --maxIterations', () => {
@@ -113,14 +138,14 @@ describe('Generate Commands', () => {
       expect(longs).toContain('--maxIterations');
     });
 
-    it('should default model to "claude-sonnet-4-6"', () => {
+    it('should have no static default for --model (provider-dependent)', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
       const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
       const modelOption = docProcCommand?.options.find(o => o.long === '--model');
 
-      expect(modelOption?.defaultValue).toBe('claude-sonnet-4-6');
+      expect(modelOption?.defaultValue).toBeUndefined();
     });
 
     it('should default maxIterations to "8"', () => {
@@ -155,7 +180,7 @@ describe('Generate Commands', () => {
       );
     });
 
-    it('should have required options: --file, --output, --anthropicApiKey', () => {
+    it('should have required options: --file, --output', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
@@ -165,10 +190,35 @@ describe('Generate Commands', () => {
 
       expect(longs).toContain('--file');
       expect(longs).toContain('--output');
-      expect(longs).toContain('--anthropicApiKey');
     });
 
-    it('should mark --file, --output, --anthropicApiKey as mandatory', () => {
+    it('should have API key options: --anthropicApiKey and --openAiApiKey', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const options = reportComposerCommand?.options ?? [];
+      const longs = options.map(o => o.long);
+
+      expect(longs).toContain('--anthropicApiKey');
+      expect(longs).toContain('--openAiApiKey');
+    });
+
+    it('should have both API key options as optional (not mandatory)', () => {
+      registerGenerateCommands(program);
+
+      const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
+      const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
+      const options = reportComposerCommand?.options ?? [];
+
+      const anthropicOption = options.find(o => o.long === '--anthropicApiKey');
+      const openAiOption = options.find(o => o.long === '--openAiApiKey');
+
+      expect(anthropicOption?.mandatory).toBe(false);
+      expect(openAiOption?.mandatory).toBe(false);
+    });
+
+    it('should mark --file and --output as mandatory', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
@@ -177,11 +227,9 @@ describe('Generate Commands', () => {
 
       const fileOption = options.find(o => o.long === '--file');
       const outputOption = options.find(o => o.long === '--output');
-      const keyOption = options.find(o => o.long === '--anthropicApiKey');
 
       expect(fileOption?.mandatory).toBe(true);
       expect(outputOption?.mandatory).toBe(true);
-      expect(keyOption?.mandatory).toBe(true);
     });
 
     it('should have optional options: --model, --maxIterations', () => {
@@ -196,14 +244,14 @@ describe('Generate Commands', () => {
       expect(longs).toContain('--maxIterations');
     });
 
-    it('should default model to "claude-sonnet-4-6"', () => {
+    it('should have no static default for --model (provider-dependent)', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
       const reportComposerCommand = generateCommand?.commands.find(cmd => cmd.name() === 'report-composer');
       const modelOption = reportComposerCommand?.options.find(o => o.long === '--model');
 
-      expect(modelOption?.defaultValue).toBe('claude-sonnet-4-6');
+      expect(modelOption?.defaultValue).toBeUndefined();
     });
 
     it('should default maxIterations to "5"', () => {

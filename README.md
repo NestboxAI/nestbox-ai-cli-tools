@@ -52,7 +52,7 @@ Options:
 - [`document`](#document) - Manage Nestbox documents and collections
 - [`image`](#image) - Manage Nestbox images
 - [`doc-proc`](#doc-proc) - Document processing pipeline management
-- [`generate`](#generate) - AI-assisted configuration and project generation
+- [`generate`](#generate) - AI-assisted configuration generation (Anthropic or OpenAI)
 
 ---
 
@@ -916,7 +916,7 @@ nestbox doc-proc health [options]
 
 ### `generate`
 
-AI-assisted generation of configuration files and project scaffolds. Uses Claude to generate validated YAML configurations from plain-English instruction files.
+AI-assisted generation of configuration files and project scaffolds. Uses an AI agent (Anthropic Claude or OpenAI GPT, your choice) to produce validated YAML configurations from plain-English instruction files. The agent writes, validates against the schema, and iterates automatically until the output is valid.
 
 ---
 
@@ -950,36 +950,47 @@ nestbox generate project my-chatbot --lang js --template chatbot
 
 ### `generate doc-proc`
 
-Generate a document processing pipeline configuration (`config.yaml` and `eval.yaml`) from a plain-English instructions file using Claude AI.
+Generate a document processing pipeline configuration (`config.yaml` and `eval.yaml`) from a plain-English instructions file using AI.
 
-The agent reads your instructions, writes both files, validates each against their schemas, and iterates automatically until both pass validation.
+The agent reads your instructions, writes both files, validates each against their schemas, and iterates automatically until both pass validation. Supports **Anthropic Claude** and **OpenAI GPT** — provide one API key to select the provider.
 
 ```bash
-nestbox generate doc-proc --file <path> --output <dir> --anthropicApiKey <key> [options]
+nestbox generate doc-proc --file <path> --output <dir> [--anthropicApiKey <key> | --openAiApiKey <key>] [options]
 ```
 
 **Required options:**
 - `-f, --file <path>` - Path to a Markdown file describing what the pipeline should do
 - `-o, --output <dir>` - Output directory where `config.yaml` and `eval.yaml` will be written
-- `--anthropicApiKey <key>` - Anthropic API key (or set `ANTHROPIC_API_KEY` env var)
+
+**API key (one required):**
+- `--anthropicApiKey <key>` - Use Claude (Anthropic). Also reads `ANTHROPIC_API_KEY` env var
+- `--openAiApiKey <key>` - Use GPT (OpenAI). Also reads `OPENAI_API_KEY` env var
+
+When both are provided, Anthropic takes precedence.
 
 **Optional options:**
-- `--model <model>` - Claude model ID (default: `claude-sonnet-4-6`)
+- `--model <model>` - Model ID. Defaults to `claude-sonnet-4-6` (Anthropic) or `gpt-4o` (OpenAI)
 - `--maxIterations <n>` - Maximum agent iterations before giving up (default: `8`)
 
 **Output files:**
 - `config.yaml` — document processing pipeline configuration
 - `eval.yaml` — evaluation test cases for the pipeline
 
-**Example:**
+**Examples:**
 ```bash
-# Using a flag for the API key
+# Anthropic Claude
 nestbox generate doc-proc \
   --file ./instructions.md \
   --output ./pipeline \
   --anthropicApiKey sk-ant-...
 
-# Using the environment variable
+# OpenAI GPT
+nestbox generate doc-proc \
+  --file ./instructions.md \
+  --output ./pipeline \
+  --openAiApiKey sk-...
+
+# Via environment variables
 export ANTHROPIC_API_KEY=sk-ant-...
 nestbox generate doc-proc --file ./instructions.md --output ./pipeline
 ```
@@ -1001,32 +1012,48 @@ Eval test cases:
 
 ### `generate report-composer`
 
-Generate a GraphRAG report composer configuration (`report.yaml`) from a plain-English instructions file using Claude AI.
+Generate a GraphRAG report composer configuration (`report.yaml`) from a plain-English instructions file using AI.
 
-The agent reads your instructions, writes the report configuration, validates it against the schema (v2.2), and iterates automatically until it passes — it will not finish until the file is valid.
+The agent reads your instructions, writes the report configuration, validates it against the schema (v2.2), and iterates automatically until it passes — it will not finish until the file is valid. Supports **Anthropic Claude** and **OpenAI GPT** — provide one API key to select the provider.
 
 ```bash
-nestbox generate report-composer --file <path> --output <dir> --anthropicApiKey <key> [options]
+nestbox generate report-composer --file <path> --output <dir> [--anthropicApiKey <key> | --openAiApiKey <key>] [options]
 ```
 
 **Required options:**
 - `-f, --file <path>` - Path to a Markdown file describing the report to generate
 - `-o, --output <dir>` - Output directory where `report.yaml` will be written
-- `--anthropicApiKey <key>` - Anthropic API key (or set `ANTHROPIC_API_KEY` env var)
+
+**API key (one required):**
+- `--anthropicApiKey <key>` - Use Claude (Anthropic). Also reads `ANTHROPIC_API_KEY` env var
+- `--openAiApiKey <key>` - Use GPT (OpenAI). Also reads `OPENAI_API_KEY` env var
+
+When both are provided, Anthropic takes precedence.
 
 **Optional options:**
-- `--model <model>` - Claude model ID (default: `claude-sonnet-4-6`)
+- `--model <model>` - Model ID. Defaults to `claude-sonnet-4-6` (Anthropic) or `gpt-4o` (OpenAI)
 - `--maxIterations <n>` - Maximum agent iterations before giving up (default: `5`)
 
 **Output files:**
 - `report.yaml` — report composer configuration (schema version 2.2)
 
-**Example:**
+**Examples:**
 ```bash
+# Anthropic Claude
 nestbox generate report-composer \
   --file ./report-instructions.md \
   --output ~/Downloads/my-report \
   --anthropicApiKey sk-ant-...
+
+# OpenAI GPT
+nestbox generate report-composer \
+  --file ./report-instructions.md \
+  --output ~/Downloads/my-report \
+  --openAiApiKey sk-...
+
+# Via environment variable
+export OPENAI_API_KEY=sk-...
+nestbox generate report-composer --file ./report-instructions.md --output ~/Downloads/my-report
 ```
 
 **Example instructions file (`report-instructions.md`):**
