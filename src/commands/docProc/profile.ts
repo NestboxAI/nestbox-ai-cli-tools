@@ -52,6 +52,7 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
     .description('Create/register a processing profile from YAML file')
     .requiredOption('-f, --file <path>', 'Path to profile YAML file')
     .option('-n, --name <name>', 'Override profile name')
+    .option('--tags <tags>', 'Comma-separated list of tags (e.g. "finance,2024,invoice")')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
     .option('--json', 'Output JSON')
@@ -63,8 +64,13 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
 
         const context = await resolveDocProcContext(apis, options);
         const form = new FormData();
-        form.append('file', fs.createReadStream(options.file));
+        // Backend expects the YAML file under the field name 'yaml'
+        form.append('yaml', fs.createReadStream(options.file));
         if (options.name) form.append('name', options.name);
+        if (options.tags) {
+          const tagList = options.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+          tagList.forEach((tag: string) => form.append('tags', tag));
+        }
 
         const response = await apis.documentProcessingApi.documentProcessingControllerCreateProfile(
           context.projectId,
@@ -116,17 +122,21 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
     .option('--instance <instanceId>', 'Document processing instance ID')
     .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
+    .option('--tags <tags>', 'Filter by comma-separated tags (e.g. "finance,2024")')
     .option('--json', 'Output JSON')
-    .action((options: { project?: string; instance?: string; page: string; limit: string; json?: boolean }) => {
+    .action((options: any) => {
       withDocProcErrorHandling(async () => {
         const apis = createDocProcApis();
         if (!apis) return;
         const context = await resolveDocProcContext(apis, options);
 
+        const params: Record<string, string | number> = { page: Number(options.page), limit: Number(options.limit) };
+        if (options.tags) params.tags = options.tags;
+
         const response = await apis.documentProcessingApi.documentProcessingControllerListProfiles(
           context.projectId,
           context.instanceId,
-          { params: { page: Number(options.page), limit: Number(options.limit) } },
+          { params },
         );
 
         const data = getResponseData(response);
@@ -139,8 +149,13 @@ export function registerDocProcProfileCommands(docProcCommand: Command): void {
         }
 
         printSimpleTable(
-          ['Profile ID', 'Name', 'Created At'],
-          profiles.map((profile: any) => [profile.id || 'N/A', profile.name || 'N/A', profile.createdAt || 'N/A']),
+          ['Profile ID', 'Name', 'Tags', 'Created At'],
+          profiles.map((profile: any) => [
+            profile.id || 'N/A',
+            profile.name || 'N/A',
+            Array.isArray(profile.tags) && profile.tags.length ? profile.tags.join(', ') : '—',
+            profile.createdAt || 'N/A',
+          ]),
         );
       });
     });

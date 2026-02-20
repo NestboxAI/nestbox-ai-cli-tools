@@ -22,6 +22,7 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
     .option('--profile <profileId>', 'Processing profile ID')
     .option('--stages <stages>', 'Comma-separated stage override')
     .option('--priority <priority>', 'Job priority: low|normal|high')
+    .option('--tags <tags>', 'Comma-separated list of tags (e.g. "invoice,2024,finance")')
     .option('--project <projectId>', 'Project ID or name (defaults to current project)')
     .option('--instance <instanceId>', 'Document processing instance ID')
     .option('--json', 'Output JSON')
@@ -37,6 +38,10 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
         if (options.profile) form.append('profileId', options.profile);
         if (options.stages) form.append('stages', options.stages);
         if (options.priority) form.append('priority', options.priority);
+        if (options.tags) {
+          const tagList = options.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+          tagList.forEach((tag: string) => form.append('tags', tag));
+        }
 
         const response = await apis.documentProcessingApi.documentProcessingControllerCreateDocumentProcessingJob(
           context.projectId,
@@ -58,16 +63,23 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
     .option('--instance <instanceId>', 'Document processing instance ID')
     .option('--page <page>', 'Page number', '1')
     .option('--limit <limit>', 'Page size', '20')
+    .option('--profile <profileId>', 'Filter by profile ID')
+    .option('--tags <tags>', 'Filter by comma-separated tags (e.g. "invoice,2024")')
     .option('--json', 'Output JSON')
     .action((options: any) => {
       withDocProcErrorHandling(async () => {
         const apis = createDocProcApis();
         if (!apis) return;
         const context = await resolveDocProcContext(apis, options);
+
+        const params: Record<string, string | number> = { page: Number(options.page), limit: Number(options.limit) };
+        if (options.profile) params.profileId = options.profile;
+        if (options.tags) params.tags = options.tags;
+
         const response = await apis.documentProcessingApi.documentProcessingControllerListDocuments(
           context.projectId,
           context.instanceId,
-          { params: { page: Number(options.page), limit: Number(options.limit) } },
+          { params },
         );
 
         const data = getResponseData(response);
@@ -80,8 +92,14 @@ export function registerDocProcDocumentCommands(docProcCommand: Command): void {
         }
 
         printSimpleTable(
-          ['Document ID', 'Name', 'Status', 'Created At'],
-          documents.map((doc: any) => [doc.id || 'N/A', doc.name || doc.fileName || 'N/A', doc.status || 'N/A', doc.createdAt || 'N/A']),
+          ['Document ID', 'Name', 'Tags', 'Profile ID', 'Processed At'],
+          documents.map((doc: any) => [
+            doc.documentId || doc.id || 'N/A',
+            doc.fileName || doc.name || 'N/A',
+            Array.isArray(doc.tags) && doc.tags.length ? doc.tags.join(', ') : '—',
+            doc.profileId || 'N/A',
+            doc.processedAt || doc.createdAt || 'N/A',
+          ]),
         );
       });
     });

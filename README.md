@@ -542,18 +542,22 @@ nestbox doc-proc profile create --file <path> [options]
 **Options:**
 - `-f, --file <path>` - Path to profile YAML file (required)
 - `-n, --name <name>` - Override the profile name from the file
+- `--tags <tags>` - Comma-separated list of tags to associate with the profile
 - `--project <projectId>` - Project ID or name
 - `--instance <instanceId>` - Processing instance ID
 - `--json` - Output raw JSON
 
-**Example:**
+**Examples:**
 ```bash
 nestbox doc-proc profile create --file ./my-profile.yaml --name "OCR + GraphRAG"
+
+# With tags
+nestbox doc-proc profile create --file ./my-profile.yaml --tags "finance,contracts,2024"
 ```
 
 #### `doc-proc profile list`
 
-List all profiles registered with the instance.
+List all profiles registered with the instance. Displays a table with **Profile ID**, **Name**, **Tags**, and **Created At**.
 
 ```bash
 nestbox doc-proc profile list [options]
@@ -562,6 +566,15 @@ nestbox doc-proc profile list [options]
 **Options:**
 - `--page <page>` - Page number (default: `1`)
 - `--limit <limit>` - Page size (default: `20`)
+- `--tags <tags>` - Filter by comma-separated tags — only profiles matching any of the given tags are returned
+
+**Examples:**
+```bash
+nestbox doc-proc profile list
+
+# Filter by tags
+nestbox doc-proc profile list --tags "finance,2024"
+```
 
 #### `doc-proc profile show`
 
@@ -610,15 +623,19 @@ nestbox doc-proc document create --input <path> [options]
 - `--profile <profileId>` - Processing profile ID
 - `--stages <stages>` - Comma-separated stage override (e.g. `ocr,chunking`)
 - `--priority <priority>` - Job priority: `low`, `normal`, or `high`
+- `--tags <tags>` - Comma-separated list of tags to associate with the document
 
-**Example:**
+**Examples:**
 ```bash
 nestbox doc-proc document create --input ./contract.pdf --profile prof-abc123
+
+# With tags
+nestbox doc-proc document create --input ./invoice.pdf --profile prof-abc123 --tags "invoice,2024,acme-corp"
 ```
 
 #### `doc-proc document list`
 
-List all processed documents.
+List all processed documents. Displays a table with **Document ID**, **Name**, **Tags**, **Profile ID**, and **Processed At**.
 
 ```bash
 nestbox doc-proc document list [options]
@@ -627,6 +644,16 @@ nestbox doc-proc document list [options]
 **Options:**
 - `--page <page>` - Page number (default: `1`)
 - `--limit <limit>` - Page size (default: `20`)
+- `--profile <profileId>` - Filter by profile ID
+- `--tags <tags>` - Filter by comma-separated tags — only documents matching any of the given tags are returned
+
+**Examples:**
+```bash
+nestbox doc-proc document list
+
+# Filter by profile and tags
+nestbox doc-proc document list --profile prof-abc123 --tags "invoice,2024"
+```
 
 #### `doc-proc document show`
 

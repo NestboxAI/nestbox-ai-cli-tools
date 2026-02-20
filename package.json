@@ -56,7 +56,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.77.0",
-    "@nestbox-ai/admin": "^1.0.67",
+    "@nestbox-ai/admin": "^1.0.69",
     "@types/js-yaml": "^4.0.9",
     "adm-zip": "^0.5.16",
     "ajv": "^8.17.1",
