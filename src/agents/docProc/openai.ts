@@ -228,6 +228,7 @@ export async function runDocProcAgentWithOpenAI(
     const toolResultMessages: OpenAI.ChatCompletionMessageParam[] = [];
 
     for (const toolCall of message.tool_calls ?? []) {
+      if (toolCall.type !== 'function') continue;
       onProgress(`  → tool: ${toolCall.function.name}`);
       const input = JSON.parse(toolCall.function.arguments) as Record<string, string>;
       const result = executeTool(toolCall.function.name, input);
