@@ -54,12 +54,16 @@ function validateYaml(content: string, schemaContent: string): ValidationResult 
     return { valid: false, errors: [`YAML parse error: ${e.message}`] };
   }
 
-  let schema: object;
+  let schema: Record<string, unknown>;
   try {
-    schema = yaml.load(schemaContent) as object;
+    schema = yaml.load(schemaContent) as Record<string, unknown>;
   } catch (e: any) {
     return { valid: false, errors: [`Schema parse error: ${e.message}`] };
   }
+
+  // Remove $schema so AJV doesn't try to resolve the meta-schema URI
+  // (AJV 8 defaults to draft-07 and doesn't recognise draft 2020-12).
+  delete schema['$schema'];
 
   const ajv = new Ajv({ strict: false, allErrors: true });
   // Suppress "unknown format 'uri' ignored" console warnings from AJV
