@@ -81,7 +81,51 @@ type MachineInstanceData = {
 	machineId?: string;
 	id?: number;
 	internalIP?: string;
+	instanceName?: string;
 };
+
+type ExistingAgent = {
+	id: number;
+	agentName: string;
+	machineInstanceId?: number;
+	machineName?: string;
+};
+
+export function selectTargetAgent(
+	agents: ExistingAgent[],
+	agentName: string,
+	instance: MachineInstanceData
+): ExistingAgent | undefined {
+	const matchingByName = agents.filter(agent => agent.agentName === agentName);
+
+	if (!matchingByName.length) {
+		return undefined;
+	}
+
+	if (instance.id !== undefined) {
+		const byInstanceId = matchingByName.find(
+			agent => agent.machineInstanceId === instance.id
+		);
+		if (byInstanceId) {
+			return byInstanceId;
+		}
+	}
+
+	if (instance.instanceName) {
+		const byInstanceName = matchingByName.find(
+			agent => agent.machineName === instance.instanceName
+		);
+		if (byInstanceName) {
+			return byInstanceName;
+		}
+	}
+
+	if (matchingByName.length === 1) {
+		return matchingByName[0];
+	}
+
+	return undefined;
+}
 
 async function buildAgentData(
 	options: DeployAgentOptions,
@@ -262,11 +306,14 @@ export function registerDeployCommand(agentCommand: Command) {
 									data.type
 								);
 
-							let targetAgent =
-								agentsData.data.machineAgents.find(
-									(agent: any) =>
-										agent.agentName === data.agentName
-								);
+							let targetAgent = selectTargetAgent(
+								agentsData.data.machineAgents,
+								data.agentName,
+								{
+									id: targetInstance.id,
+									instanceName: targetInstance.instanceName,
+								}
+							);
 
 							if (!targetAgent && !options.silent) {
 								const { confirmCreation } =
