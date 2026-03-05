@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Command } from "commander";
 import { registerAgentCommands } from "../src/commands/agent";
+import { selectTargetAgent } from "../src/commands/agent/deploy";
 
 vi.unmock("../src/utils/agent");
 import { getAgentExcludePatterns } from "../src/utils/agent";
@@ -187,5 +188,31 @@ describe("Agent Config Utilities", () => {
 			"node_modules",
 			".git",
 		]);
+	});
+
+	it("should select deploy target agent by machine instance id when names collide", () => {
+		const selected = selectTargetAgent(
+			[
+				{ id: 1, agentName: "simple-claude-agent", machineInstanceId: 11 },
+				{ id: 2, agentName: "simple-claude-agent", machineInstanceId: 12 },
+			],
+			"simple-claude-agent",
+			{ id: 12 }
+		);
+
+		expect(selected?.id).toBe(2);
+	});
+
+	it("should return undefined when duplicate agents exist but none match target instance", () => {
+		const selected = selectTargetAgent(
+			[
+				{ id: 1, agentName: "simple-claude-agent", machineInstanceId: 11 },
+				{ id: 2, agentName: "simple-claude-agent", machineInstanceId: 12 },
+			],
+			"simple-claude-agent",
+			{ id: 13 }
+		);
+
+		expect(selected).toBeUndefined();
 	});
 });

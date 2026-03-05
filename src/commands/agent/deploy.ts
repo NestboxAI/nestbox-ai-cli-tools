@@ -81,7 +81,52 @@ type MachineInstanceData = {
 	machineId?: string;
 	id?: number;
 	internalIP?: string;
+	instanceName?: string;
 };
+
+type ExistingAgent = {
+	id?: number;
+	agentName?: string;
+	machineInstanceId?: number;
+	machineName?: string;
+	entryFunctionName?: string;
+};
+
+export function selectTargetAgent(
+	agents: ExistingAgent[],
+	agentName: string,
+	instance: MachineInstanceData
+): ExistingAgent | undefined {
+	const matchingByName = agents.filter(agent => agent.agentName === agentName);
+
+	if (!matchingByName.length) {
+		return undefined;
+	}
+
+	if (instance.id !== undefined) {
+		const byInstanceId = matchingByName.find(
+			agent => agent.machineInstanceId === instance.id
+		);
+		if (byInstanceId && byInstanceId.id !== undefined) {
+			return byInstanceId;
+		}
+	}
+
+	if (instance.instanceName) {
+		const byInstanceName = matchingByName.find(
+			agent => agent.machineName === instance.instanceName
+		);
+		if (byInstanceName && byInstanceName.id !== undefined) {
+			return byInstanceName;
+		}
+	}
+
+	if (matchingByName.length === 1 && matchingByName[0].id !== undefined) {
+		return matchingByName[0];
+	}
+
+	return undefined;
+}
 
 async function buildAgentData(
 	options: DeployAgentOptions,
@@ -262,11 +307,14 @@ export function registerDeployCommand(agentCommand: Command) {
 									data.type
 								);
 
-							let targetAgent =
-								agentsData.data.machineAgents.find(
-									(agent: any) =>
-										agent.agentName === data.agentName
-								);
+							let targetAgent = selectTargetAgent(
+								agentsData.data.machineAgents,
+								data.agentName,
+								{
+									id: targetInstance.id,
+									instanceName: targetInstance.instanceName,
+								}
+							);
 
 							if (!targetAgent && !options.silent) {
 								const { confirmCreation } =
@@ -302,10 +350,16 @@ export function registerDeployCommand(agentCommand: Command) {
 								);
 							}
 
-							const agentId = targetAgent.id;
+							const agentId = targetAgent?.id;
+							if (agentId === undefined) {
+								throw new Error(
+									`Unable to resolve an agent ID for ${data.agentName} on instance ${machineName}.`
+								);
+							}
+
 							const resolvedEntry =
 								data.entryFunctionName ||
-								targetAgent.entryFunctionName ||
+								targetAgent?.entryFunctionName ||
 								"main";
 							const instanceId = targetInstance.id;
 
