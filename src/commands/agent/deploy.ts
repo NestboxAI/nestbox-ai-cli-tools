@@ -121,6 +121,10 @@ export function selectTargetAgent(
 		}
 	}
 
+	if (instance.id !== undefined || instance.instanceName) {
+		return undefined;
+	}
+
 	if (matchingByName.length === 1 && matchingByName[0].id !== undefined) {
 		return matchingByName[0];
 	}

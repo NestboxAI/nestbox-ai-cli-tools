@@ -215,4 +215,16 @@ describe("Agent Config Utilities", () => {
 
 		expect(selected).toBeUndefined();
 	});
+
+	it("should not select a single name match from a different instance", () => {
+		const selected = selectTargetAgent(
+			[
+				{ id: 1, agentName: "simple-claude-agent", machineInstanceId: 11 },
+			],
+			"simple-claude-agent",
+			{ id: 12, instanceName: "ts-agent-claude-14" }
+		);
+
+		expect(selected).toBeUndefined();
+	});
 });
