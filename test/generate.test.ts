@@ -148,14 +148,14 @@ describe('Generate Commands', () => {
       expect(modelOption?.defaultValue).toBeUndefined();
     });
 
-    it('should default maxIterations to "8"', () => {
+    it('should default maxIterations to "4"', () => {
       registerGenerateCommands(program);
 
       const generateCommand = program.commands.find(cmd => cmd.name() === 'generate');
       const docProcCommand = generateCommand?.commands.find(cmd => cmd.name() === 'doc-proc');
       const iterOption = docProcCommand?.options.find(o => o.long === '--maxIterations');
 
-      expect(iterOption?.defaultValue).toBe('8');
+      expect(iterOption?.defaultValue).toBe('4');
     });
   });
 
