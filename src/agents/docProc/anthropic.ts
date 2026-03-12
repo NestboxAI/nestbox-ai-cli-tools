@@ -15,6 +15,8 @@ export interface DocProcAgentOptions {
   model?: string;
   /** Maximum agentic iterations before giving up */
   maxIterations?: number;
+  /** Maximum tokens per model response */
+  maxTokens?: number;
   /** Called on each status update (for spinner / logging) */
   onProgress?: (message: string) => void;
 }
@@ -146,6 +148,7 @@ export async function runDocProcAgent(options: DocProcAgentOptions): Promise<Doc
     anthropicApiKey,
     model = DEFAULT_MODEL,
     maxIterations = DEFAULT_MAX_ITERATIONS,
+    maxTokens = 8096,
     onProgress = () => {},
   } = options;
 
@@ -216,7 +219,7 @@ export async function runDocProcAgent(options: DocProcAgentOptions): Promise<Doc
 
     const response = await client.messages.create({
       model,
-      max_tokens: 8096,
+      max_tokens: maxTokens,
       system: systemPrompt,
       tools: TOOLS,
       // Force Claude to call a tool every turn — prevents it from

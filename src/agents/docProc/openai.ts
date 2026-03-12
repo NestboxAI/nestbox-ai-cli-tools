@@ -18,6 +18,8 @@ export interface DocProcOpenAIAgentOptions {
   model?: string;
   /** Maximum agentic iterations before giving up */
   maxIterations?: number;
+  /** Maximum tokens per model response */
+  maxTokens?: number;
   /** Called on each status update (for spinner / logging) */
   onProgress?: (message: string) => void;
 }
@@ -149,6 +151,7 @@ export async function runDocProcAgentWithOpenAI(
     openAiApiKey,
     model = DEFAULT_MODEL,
     maxIterations = DEFAULT_MAX_ITERATIONS,
+    maxTokens = 16384,
     onProgress = () => {},
   } = options;
 
@@ -211,6 +214,7 @@ export async function runDocProcAgentWithOpenAI(
 
     const response = await client.chat.completions.create({
       model,
+      max_tokens: maxTokens,
       messages,
       tools: TOOLS,
       // Force the model to call a tool every turn.

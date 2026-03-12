@@ -15,6 +15,7 @@ interface DocProcGenerateOptions {
   openAiApiKey?: string;
   model?: string;
   maxIterations?: string;
+  maxTokens?: string;
 }
 
 // ─── Command ──────────────────────────────────────────────────────────────────
@@ -30,7 +31,8 @@ export function registerDocProcGenerateCommand(generateCommand: Command): void {
     .option('--anthropicApiKey <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
     .option('--openAiApiKey <key>', 'OpenAI API key (or set OPENAI_API_KEY env var)')
     .option('--model <model>', 'Model ID (defaults to claude-sonnet-4-6 for Anthropic, gpt-4o for OpenAI)')
-    .option('--maxIterations <n>', 'Maximum agent iterations', '8')
+    .option('--maxIterations <n>', 'Maximum agent iterations', '4')
+    .option('--maxTokens <n>', 'Maximum tokens per model response (defaults to 8096 for Anthropic, 16384 for OpenAI)')
     .action(async (options: DocProcGenerateOptions) => {
       // ── Resolve API keys ────────────────────────────────────────────────────
       const anthropicKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
@@ -81,10 +83,13 @@ export function registerDocProcGenerateCommand(generateCommand: Command): void {
       const spinner = ora('Initialising agent...').start();
 
       try {
+        const maxTokens = options.maxTokens ? parseInt(options.maxTokens, 10) : undefined;
+
         const agentOptions = {
           instructions,
           model,
-          maxIterations: parseInt(options.maxIterations ?? '8', 10),
+          maxIterations: parseInt(options.maxIterations ?? '4', 10),
+          ...(maxTokens != null && { maxTokens }),
           onProgress: (msg: string) => {
             spinner.text = msg;
           },
